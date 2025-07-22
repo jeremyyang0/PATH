@@ -178,13 +178,47 @@ class EleParser:
             # 忽略解析错误的文件
             return []
     
+    def parse_method_file(self,file_path):
+        """解析Python文件中的方法"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            tree = ast.parse(content)
+            method_results = []
+            
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and not node.name.startswith("_"):
+                    method_info = {
+                        'name': node.name,
+                        'line': node.lineno,
+                        'doc': self.extract_method_doc(node) if self.extract_method_doc(node) else node.name
+                    }
+                    method_results.append(method_info)
+            if method_results:
+                return [{"file_path":str(file_path), "methods": method_results}]
+            else:
+                return []
+        except Exception as e:
+            return []
+    
+    def extract_method_doc(self, node):
+        """提取方法的文档字符串"""
+        for item in node.body:
+            if isinstance(item, ast.Expr) and isinstance(item.value, ast.Constant) and isinstance(item.value.value, str):
+                return item.value.value
+        return ""
     def scan_directory(self):
         """扫描目录中的所有Python文件"""
         python_files = []
+        method_dir = self.root_dir / "method"
+        if not method_dir.exists():
+            return
         
-        for py_file in self.root_dir.rglob("*.py"):
-            if py_file.is_file():
-                python_files.append(py_file)
+        for root, dirs, files in os.walk(method_dir):
+            for file in files:
+                if file.endswith(".py"):
+                    python_files.append(Path(root) / file)
         
         return python_files
     
@@ -194,15 +228,19 @@ class EleParser:
         self.scan_packages()
         
         python_files = self.scan_directory()
-        all_results = []
+        ele_results = []
+        method_results = []
         
         for file_path in python_files:
             file_results = self.parse_file(file_path)
-            all_results.extend(file_results)
+            methods = self.parse_method_file(file_path)
+            ele_results.extend(file_results)
+            method_results.extend(methods)
         
         return {
-            'results': all_results,
-            'package_names': self.package_names
+            'results': ele_results,
+            'package_names': self.package_names,
+            'method_results': method_results
         }
 
 def main():

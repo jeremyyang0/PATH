@@ -21,9 +21,9 @@ export class DragAndDropController implements vscode.TreeDragAndDropController<T
                 dragTexts.push(item.codePath);
             }
         }
-        
-        if (dragTexts.length > 0) {
-            dataTransfer.set('text/plain', new vscode.DataTransferItem(dragTexts.join('\n')));
+        const dragText = dragTexts.join('()\n');
+        if (dragText.length > 0) {
+            dataTransfer.set('text/plain', new vscode.DataTransferItem(dragText));
         }
     }
 

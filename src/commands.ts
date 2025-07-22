@@ -4,7 +4,7 @@ import { getAtomicFilePath, getEleClassName, generateBaseClassName, addMethodToF
 import { generateMethodCode } from './utils';
 
 /**
- * 在当前编辑器的光标位置插入文本
+ * 在当前编辑器的光标位置插入文本，自动继承上一行缩进，并在末尾换行
  */
 export function insertTextAtCursor(text: string): void {
     const editor = vscode.window.activeTextEditor;
@@ -14,8 +14,14 @@ export function insertTextAtCursor(text: string): void {
     }
     const selection = editor.selection;
     const position = selection.active;
+    // 获取当前行的缩进
+    const line = editor.document.lineAt(position.line - 1);
+    const indentMatch = line.text.match(/^\s*/);
+    const indent = indentMatch ? indentMatch[0] : '';
+    // 插入内容前加缩进，末尾加换行
+    const insertText = `${indent}${text}()\n`;
     editor.edit(editBuilder => {
-        editBuilder.insert(position, text);
+        editBuilder.insert(position, insertText);
     });
 }
 
