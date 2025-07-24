@@ -3,10 +3,12 @@ import { EleTreeDataProvider } from './eleTreeDataProvider';
 import { insertTextAtCursor, openFileAtLine, addOperationToAtomicFile } from './commands';
 import { TreeItem } from './treeItem';
 import { MethodsDataProvider } from './methodsDataProvider';
+import { SecondaryViewProvider } from './secondaryViewProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
     const provider = new EleTreeDataProvider();
     const methodsProvider = new MethodsDataProvider();
+    const secondaryProvider = new SecondaryViewProvider(context.extensionUri);
     // 注册树形视图
     const treeView = vscode.window.createTreeView('eleTreeViewer', {
         treeDataProvider: provider,
@@ -18,6 +20,11 @@ export function activate(context: vscode.ExtensionContext): void {
         showCollapseAll: true,
         dragAndDropController: methodsProvider.dragAndDropController
     });
+
+    // 注册webview视图提供者
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider(SecondaryViewProvider.viewType, secondaryProvider)
+    );
     // 注册命令
     const refreshCommand = vscode.commands.registerCommand('eleTreeViewer.refresh', () => {
         provider.refresh();
@@ -82,6 +89,23 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.window.showInformationMessage('无法获取方法信息');
         }
     });
+
+    const openSecondaryViewCommand = vscode.commands.registerCommand('eleTreeViewer.openSecondaryView', () => {
+        vscode.commands.executeCommand('eleSecondaryView.focus');
+    });
+
+    const focusSecondaryViewCommand = vscode.commands.registerCommand('eleSecondaryView.focus', () => {
+        secondaryProvider.focus();
+    });
+
+    // 创建状态栏按钮
+    const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusBarItem.text = "$(window) 辅助视图";
+    statusBarItem.tooltip = "显示Ele Tree辅助视图";
+    statusBarItem.command = 'eleTreeViewer.openSecondaryView';
+    
+    // 默认显示状态栏按钮
+    statusBarItem.show();
     // 监听文件变化
     const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.py');
     fileWatcher.onDidChange(() => {
@@ -118,11 +142,18 @@ export function activate(context: vscode.ExtensionContext): void {
         methodsClearSearchCommand,
         methodsOpenFileCommand,
         jumpToMethodCommand,
+        openSecondaryViewCommand,
+        focusSecondaryViewCommand,
+        statusBarItem,
         fileWatcher
     );
     // 初始加载数据
     provider.loadData();
     methodsProvider.loadData();
+    
+    // 自动显示辅助视图容器
+    vscode.commands.executeCommand('workbench.view.extension.eleSecondaryViewContainer');
+    
     console.log('EasyTest插件已激活');
 }
 

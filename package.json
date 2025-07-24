@@ -24,6 +24,13 @@
           "title": "Ele变量树",
           "icon": "$(list-tree)"
         }
+      ],
+      "panel": [
+        {
+          "id": "eleSecondaryViewContainer",
+          "title": "Ele辅助视图",
+          "icon": "$(window)"
+        }
       ]
     },
     "views": {
@@ -39,6 +46,14 @@
           "name": "方法树",
           "when": "true",
           "dragAndDropController": "methodsViewer.dragAndDropController"
+        }
+      ],
+      "eleSecondaryViewContainer": [
+        {
+          "id": "eleSecondaryView",
+          "name": "辅助视图",
+          "type": "webview",
+          "when": "true"
         }
       ]
     },
@@ -124,6 +139,15 @@
       {
         "command": "methodsViewer.jumpToMethod",
         "title": "跳转到方法"
+      },
+      {
+        "command": "eleTreeViewer.openSecondaryView",
+        "title": "打开辅助视图",
+        "icon": "$(window)"
+      },
+      {
+        "command": "eleSecondaryView.focus",
+        "title": "显示辅助视图"
       }
     ],
     "menus": {
@@ -165,6 +189,11 @@
         },
         {
           "command": "eleTreeViewer.clearSearch",
+          "when": "view == eleTreeViewer",
+          "group": "navigation"
+        },
+        {
+          "command": "eleTreeViewer.openSecondaryView",
           "when": "view == eleTreeViewer",
           "group": "navigation"
         }
