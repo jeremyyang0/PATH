@@ -84,7 +84,25 @@ class ${baseClassName}(${eleClassName}):
                 if (baseClassFound && line) {
                     const currentIndent = line.length - line.trimStart().length;
                     if ((line.trim().startsWith('class ') && currentIndent <= indentLevel) || i === lines.length - 1) {
-                        insertIndex = line.trim().startsWith('class ') ? i : i + 1;
+                        // 如果找到下一个class，需要检查是否有装饰器，从装饰器开始排除
+                        let classStartIndex = i;
+                        if (line.trim().startsWith('class ') && i > 0) {
+                            // 向前查找可能的装饰器
+                            for (let j = i - 1; j >= 0; j--) {
+                                const prevLine = lines[j];
+                                if (!prevLine || prevLine.trim() === '') {
+                                    // 空行，继续向前查找
+                                    continue;
+                                } else if (prevLine.trim().startsWith('@')) {
+                                    // 找到装饰器，继续向前查找更多装饰器
+                                    classStartIndex = j;
+                                } else {
+                                    // 既不是空行也不是装饰器，停止查找
+                                    break;
+                                }
+                            }
+                        }
+                        insertIndex = line.trim().startsWith('class ') ? classStartIndex : i + 1;
                         break;
                     }
                 }
