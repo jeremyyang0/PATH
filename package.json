@@ -1,12 +1,13 @@
 {
-  "name": "ele-tree-viewer",
-  "displayName": "Ele Tree Viewer",
-  "description": "显示Python代码中Ele类变量的树形结构",
-  "version": "0.0.8",
+  "name": "path-plugin-auto-test-homie",
+  "displayName": "PATH (Plugin Auto Test Homie)",
+  "description": "Python自动化测试助手 - 智能解析Ele变量和方法，提供树形结构浏览和自动化测试代码生成",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": [
+    "Testing",
     "Other"
   ],
   "activationEvents": [
@@ -21,14 +22,12 @@
       "activitybar": [
         {
           "id": "eleTreeViewerContainer",
-          "title": "Ele变量树",
+          "title": "PATH - 测试元素树",
           "icon": "$(list-tree)"
-        }
-      ],
-      "panel": [
+        },
         {
           "id": "eleSecondaryViewContainer",
-          "title": "Ele辅助视图",
+          "title": "PATH - 测试辅助视图",
           "icon": "$(window)"
         }
       ]
@@ -37,21 +36,21 @@
       "eleTreeViewerContainer": [
         {
           "id": "eleTreeViewer",
-          "name": "Ele变量树",
-          "when": "true",
-          "dragAndDropController": "eleTreeViewer.dragAndDropController"
+          "name": "测试元素树",
+          "type": "webview",
+          "when": "true"
         },
         {
           "id": "methodsViewer",
-          "name": "方法树",
-          "when": "true",
-          "dragAndDropController": "methodsViewer.dragAndDropController"
+          "name": "测试方法树",
+          "type": "webview",
+          "when": "true"
         }
       ],
       "eleSecondaryViewContainer": [
         {
           "id": "eleSecondaryView",
-          "name": "辅助视图",
+          "name": "测试辅助视图",
           "type": "webview",
           "when": "true"
         }
@@ -197,33 +196,6 @@
           "when": "view == eleTreeViewer",
           "group": "navigation"
         }
-      ],
-      "view/item/context": [
-        {
-          "command": "methodsViewer.dragToEditor",
-          "when": "view == methodsViewer && viewItem == methodTreeLeaf",
-          "group": "inline"
-        },
-        {
-          "command": "eleTreeViewer.dragToEditor",
-          "when": "view == eleTreeViewer && viewItem == eleTreeLeaf",
-          "group": "inline"
-        },
-        {
-          "command": "eleTreeViewer.addClickOperation",
-          "when": "view == eleTreeViewer && viewItem == eleTreeLeaf",
-          "group": "navigation"
-        },
-        {
-          "command": "eleTreeViewer.addDoubleClickOperation",
-          "when": "view == eleTreeViewer && viewItem == eleTreeLeaf",
-          "group": "navigation"
-        },
-        {
-          "command": "methodsViewer.jumpToMethod",
-          "when": "view == methodsViewer && viewItem == methodTreeLeaf",
-          "group": "navigation@10"
-        }
       ]
     }
   },
@@ -234,6 +206,12 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts"
   },
+  "files": [
+    "out/**/*",
+    "resources/**/*",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "devDependencies": {
     "@types/vscode": "^1.60.0",
     "@types/node": "14.x",

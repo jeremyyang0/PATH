@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ele Tree Secondary View</title>
+    <style>
+        body {
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            color: var(--vscode-foreground);
+            background-color: var(--vscode-editor-background);
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background-color: var(--vscode-editor-inactiveSelectionBackground);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--vscode-activityBarBadge-background);
+        }
+        
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--vscode-activityBarBadge-background);
+        }
+        
+        .subtitle {
+            font-size: 16px;
+            color: var(--vscode-descriptionForeground);
+        }
+        
+        .content-section {
+            background-color: var(--vscode-editor-inactiveSelectionBackground);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--vscode-activityBarBadge-background);
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .info-card {
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 6px;
+            padding: 15px;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: var(--vscode-activityBarBadge-background);
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            color: var(--vscode-foreground);
+        }
+        
+        .button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+        
+        .log-area {
+            background-color: var(--vscode-terminal-background);
+            border: 1px solid var(--vscode-terminal-border);
+            border-radius: 4px;
+            padding: 15px;
+            font-family: var(--vscode-editor-font-family);
+            font-size: var(--vscode-editor-font-size);
+            color: var(--vscode-terminal-foreground);
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">🌳 Ele Tree Secondary View</div>
+            <div class="subtitle">这是右侧的辅助视图窗口，后续可以展示更多内容</div>
+        </div>
+        
+        <div class="content-section">
+            <div class="section-title">📊 项目信息</div>
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">插件名称</div>
+                    <div class="info-value">Ele Tree Viewer</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">版本</div>
+                    <div class="info-value">0.0.9</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">状态</div>
+                    <div class="info-value">运行中</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">当前时间</div>
+                    <div class="info-value" id="current-time">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="content-section">
+            <div class="section-title">🛠️ 操作面板</div>
+            <button class="button" onclick="sendMessage('Hello from Secondary View!')">发送消息</button>
+            <button class="button" onclick="refreshData()">刷新数据</button>
+            <button class="button" onclick="clearLog()">清除日志</button>
+        </div>
+        
+        <div class="content-section">
+            <div class="section-title">📝 活动日志</div>
+            <div class="log-area" id="log-area">欢迎使用 Ele Tree Secondary View！
+这里可以展示各种信息和日志。
+后续可以根据需要添加更多功能...</div>
+        </div>
+    </div>
+    
+    <script src="secondaryView.js"></script>
+</body>
+</html> 
