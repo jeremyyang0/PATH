@@ -1,6 +1,6 @@
 # PATH (Plugin Auto Test Homie) - VSCode 插件
 
-> **P**lugin **A**uto **T**est **H**omie 
+> **P**lugin **A**uto **T**est **H**omie  
 
 ## 🚀 插件概述
 
