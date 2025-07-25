@@ -68,26 +68,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "eleTreeViewer.expandAll",
-        "title": "展开所有",
-        "icon": "$(expand-all)"
-      },
-      {
-        "command": "eleTreeViewer.collapseAll",
-        "title": "收起所有",
-        "icon": "$(collapse-all)"
-      },
-      {
-        "command": "methodsViewer.expandAll",
-        "title": "展开所有",
-        "icon": "$(expand-all)"
-      },
-      {
-        "command": "methodsViewer.collapseAll",
-        "title": "收起所有",
-        "icon": "$(collapse-all)"
-      },
-      {
         "command": "eleTreeViewer.dragToEditor",
         "title": "拖拽到编辑器"
       },
@@ -159,41 +139,6 @@
         {
           "command": "methodsViewer.refresh",
           "when": "view == methodsViewer",
-          "group": "navigation"
-        },
-        {
-          "command": "eleTreeViewer.expandAll",
-          "when": "view == eleTreeViewer",
-          "group": "navigation"
-        },
-        {
-          "command": "eleTreeViewer.collapseAll",
-          "when": "view == eleTreeViewer",
-          "group": "navigation"
-        },
-        {
-          "command": "methodsViewer.expandAll",
-          "when": "view == methodsViewer",
-          "group": "navigation"
-        },
-        {
-          "command": "eleTreeViewer.search",
-          "when": "view == eleTreeViewer",
-          "group": "navigation"
-        },
-        {
-          "command": "methodsViewer.search",
-          "when": "view == methodsViewer",
-          "group": "navigation"
-        },
-        {
-          "command": "eleTreeViewer.clearSearch",
-          "when": "view == eleTreeViewer",
-          "group": "navigation"
-        },
-        {
-          "command": "eleTreeViewer.openSecondaryView",
-          "when": "view == eleTreeViewer",
           "group": "navigation"
         }
       ]

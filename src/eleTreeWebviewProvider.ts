@@ -70,6 +70,7 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
                 // webview变为可见时，发送恢复状态的消息
+                this._handleRefresh(); // 自动刷新
                 this._postMessage({ command: 'restoreState' });
             }
         });
