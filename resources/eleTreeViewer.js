@@ -10,6 +10,92 @@ let treeData = [];
 let filteredData = [];
 let expandedItems = new Set();
 let currentSearchKeyword = '';
+
+// 拖拽管理器
+class DragDropManager {
+    constructor() {
+        this.draggedElement = null;
+        this.setupDragAndDrop();
+    }
+    
+    setupDragAndDrop() {
+        // 为可拖拽元素添加事件监听
+        document.addEventListener('dragstart', this.handleDragStart.bind(this));
+        document.addEventListener('dragover', this.handleDragOver.bind(this));
+        document.addEventListener('drop', this.handleDrop.bind(this));
+        document.addEventListener('dragend', this.handleDragEnd.bind(this));
+    }
+    
+    handleDragStart(event) {
+        // 检查是否点击了右键菜单或其他交互元素
+        if (event.target.closest('.context-menu') ||
+            event.target.classList.contains('context-menu-item')) {
+            event.preventDefault();
+            return;
+        }
+        
+        const treeItem = event.target.closest('.tree-item');
+        if (!treeItem || !treeItem.hasAttribute('data-codepath')) {
+            event.preventDefault();
+            return;
+        }
+        
+        // 允许从树项的大部分区域开始拖拽
+        // 检查是否从展开图标开始（不允许）
+        if (event.target.classList.contains('expand-icon')) {
+            event.preventDefault();
+            return;
+        }
+        
+        this.draggedElement = treeItem;
+        const codePath = treeItem.getAttribute('data-codepath');
+        const elementName = treeItem.getAttribute('data-label') || codePath;
+        
+        // 设置拖拽数据
+        event.dataTransfer.setData('text/plain', codePath);
+        event.dataTransfer.effectAllowed = 'copy';
+        
+        // 设置拖拽图像文本
+        event.dataTransfer.setData('application/vnd.code.tree', JSON.stringify({
+            codePath: codePath,
+            elementName: elementName,
+            type: 'element'
+        }));
+        
+        // 添加拖拽样式
+        treeItem.classList.add('dragging');
+        
+        console.log('开始拖拽元素:', elementName);
+    }
+    
+    handleDragOver(event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+    }
+    
+    handleDrop(event) {
+        event.preventDefault();
+        const codePath = event.dataTransfer.getData('text/plain');
+        
+        if (codePath && vscode) {
+            vscode.postMessage({
+                command: 'dragToEditor',
+                codePath: codePath
+            });
+            console.log('拖拽到编辑器:', codePath);
+        }
+    }
+    
+    handleDragEnd(event) {
+        if (this.draggedElement) {
+            this.draggedElement.classList.remove('dragging');
+            this.draggedElement = null;
+        }
+    }
+}
+
+// 初始化拖拽管理器
+let dragDropManager;
 let contextMenuTarget = null; // 右键菜单目标元素
 
 // 状态保存和恢复功能
@@ -75,6 +161,9 @@ document.addEventListener('DOMContentLoaded', function() {
             performSearch();
         }
     });
+    
+    // 初始化拖拽管理器
+    dragDropManager = new DragDropManager();
     
     // 页面加载完成后尝试恢复状态
     restoreState();
@@ -158,10 +247,12 @@ function renderTreeItem(item, level) {
     
     let html = '<div class="tree-item ' + (isLeaf ? 'leaf' : 'folder') + '" data-path="' + escapeHtml(item.fullPath) + '"';
     
-    // 为叶子节点添加右键菜单和双击事件
+    // 为叶子节点添加右键菜单、双击事件和拖拽属性
     if (isLeaf && item.eleFilePath) {
         html += ' data-filepath="'+escapeHtml(item.eleFilePath)+'" data-line="'+item.eleLineNumber+'" data-codepath="'+escapeHtml(item.codePath || '')+'" data-variablename="'+escapeHtml(item.eleVariableName || '')+'" data-label="'+escapeHtml(item.label)+'"';
         html += ' oncontextmenu="showContextMenu(event, this)" ondblclick="openFileOnDoubleClick(this)"';
+        // 添加拖拽属性
+        html += ' draggable="true"';
     }
     
     html += '>';

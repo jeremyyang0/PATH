@@ -182,6 +182,64 @@
             color: var(--vscode-descriptionForeground);
             font-style: italic;
         }
+        
+        /* 拖拽样式 */
+        .tree-item[draggable="true"] {
+            cursor: grab;
+        }
+        
+        .tree-item[draggable="true"]:active {
+            cursor: grabbing;
+        }
+        
+        /* 排除特定区域的拖拽光标 */
+        .tree-item[draggable="true"] .expand-icon,
+        .tree-item[draggable="true"] .tree-actions,
+        .tree-item[draggable="true"] .action-button {
+            cursor: pointer;
+        }
+        
+        .tree-item.dragging {
+            opacity: 0.6;
+            background-color: var(--vscode-list-dropBackground);
+            border: 1px dashed var(--vscode-list-focusOutline);
+            transform: scale(0.98);
+            transition: all 0.2s ease;
+        }
+        
+        /* 拖拽提示 */
+        .tree-item[draggable="true"]:hover::after {
+            content: "拖拽到编辑器";
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: var(--vscode-descriptionForeground);
+            opacity: 0.7;
+            background: var(--vscode-editor-background);
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid var(--vscode-panel-border);
+            white-space: nowrap;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        /* 悬停时隐藏提示，避免与按钮冲突 */
+        .tree-item[draggable="true"]:hover .tree-actions {
+            display: flex;
+        }
+        
+        .tree-item[draggable="true"]:hover .tree-actions ~ ::after {
+            display: none;
+        }
+        
+        /* 确保按钮区域保持正常光标 */
+        .tree-actions,
+        .action-button {
+            cursor: pointer !important;
+        }
     </style>
 </head>
 <body>
