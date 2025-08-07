@@ -1,15 +1,11 @@
 import * as vscode from 'vscode';
-import { EleTreeDataProvider } from './eleTreeDataProvider';
 import { insertTextAtCursor, openFileAtLine, addOperationToAtomicFile } from './commands';
 import { TreeItem } from './treeItem';
-import { MethodsDataProvider } from './methodsDataProvider';
 import { SecondaryViewProvider } from './secondaryViewProvider';
 import { EleTreeWebviewProvider } from './eleTreeWebviewProvider';
 import { MethodsTreeWebviewProvider } from './methodsTreeWebviewProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
-    const provider = new EleTreeDataProvider();
-    const methodsProvider = new MethodsDataProvider();
     const secondaryProvider = new SecondaryViewProvider(context.extensionUri);
     const eleTreeWebviewProvider = new EleTreeWebviewProvider(context.extensionUri);
     const methodsTreeWebviewProvider = new MethodsTreeWebviewProvider(context.extensionUri);
@@ -29,18 +25,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const methodsRefreshCommand = vscode.commands.registerCommand('methodsViewer.refresh', () => {
         methodsTreeWebviewProvider.refresh();
     });
-    const expandAllCommand = vscode.commands.registerCommand('eleTreeViewer.expandAll', () => {
-        // Webview处理展开逻辑
-    });
-    const methodsExpandAllCommand = vscode.commands.registerCommand('methodsViewer.expandAll', () => {
-        // Webview处理展开逻辑
-    });
-    const collapseAllCommand = vscode.commands.registerCommand('eleTreeViewer.collapseAll', () => {
-        // Webview处理收起逻辑
-    });
-    const methodsCollapseAllCommand = vscode.commands.registerCommand('methodsViewer.collapseAll', () => {
-        // Webview处理收起逻辑
-    });
+
     const dragToEditorCommand = vscode.commands.registerCommand('eleTreeViewer.dragToEditor', (element: TreeItem) => {
         if (element.isLeaf && element.codePath) {
             insertTextAtCursor(element.codePath);
@@ -54,18 +39,6 @@ export function activate(context: vscode.ExtensionContext): void {
         } else {
             vscode.window.showInformationMessage('只能拖拽方法到编辑器');
         }
-    });
-    const searchCommand = vscode.commands.registerCommand('eleTreeViewer.search', () => {
-        // Webview内部处理搜索
-    });
-    const methodsSearchCommand = vscode.commands.registerCommand('methodsViewer.search', () => {
-        // Webview内部处理搜索
-    });
-    const clearSearchCommand = vscode.commands.registerCommand('eleTreeViewer.clearSearch', () => {
-        // Webview内部处理清除搜索
-    });
-    const methodsClearSearchCommand = vscode.commands.registerCommand('methodsViewer.clearSearch', () => {
-        // Webview内部处理清除搜索
     });
     const openFileCommand = vscode.commands.registerCommand('eleTreeViewer.openFile', async (filePath: string, lineNumber: number) => {
         await openFileAtLine(filePath, lineNumber);
@@ -122,20 +95,12 @@ export function activate(context: vscode.ExtensionContext): void {
     // 添加到订阅列表
     context.subscriptions.push(
         refreshCommand,
-        expandAllCommand,
-        collapseAllCommand,
         dragToEditorCommand,
-        searchCommand,
-        clearSearchCommand,
         openFileCommand,
         addClickOperationCommand,
         addDoubleClickOperationCommand,
         methodsRefreshCommand,
-        methodsExpandAllCommand,
-        methodsCollapseAllCommand,
         methodsDragToEditorCommand,
-        methodsSearchCommand,
-        methodsClearSearchCommand,
         methodsOpenFileCommand,
         jumpToMethodCommand,
         openSecondaryViewCommand,
