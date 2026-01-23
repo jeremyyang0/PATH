@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { EleTreeDataProvider, ParseResult, FileResult, EleVariable } from './eleTreeDataProvider';
+import { EleTreeDataProvider } from './eleTreeDataProvider';
+import { ParseResult, FileResult, EleVariable } from './parseEle';
 import { TreeItem } from './treeItem';
 
 export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
@@ -80,21 +81,21 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
         try {
             const htmlPath = path.join(this._extensionUri.fsPath, 'resources', 'eleTreeViewer.html');
             console.log('Reading HTML file from:', htmlPath);
-            
+
             if (!fs.existsSync(htmlPath)) {
                 console.error('HTML file not found:', htmlPath);
                 throw new Error(`HTML file not found: ${htmlPath}`);
             }
-            
+
             let html = fs.readFileSync(htmlPath, 'utf8');
-            
+
             // 获取资源URI
             const jsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'eleTreeViewer.js'));
             console.log('JS URI:', jsUri.toString());
-            
+
             // 替换资源路径
             html = html.replace('src="eleTreeViewer.js"', `src="${jsUri}"`);
-            
+
             return html;
         } catch (error) {
             console.error('Error loading HTML for eleTreeViewer:', error);
@@ -206,10 +207,10 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
 
     private _handleAddOperation(element: any, operationType: string) {
         console.log('_handleAddOperation called with:', element, operationType);
-        
+
         // 构造TreeItem对象
         const treeItem = new TreeItem(
-            element.label || element.fullPath, 
+            element.label || element.fullPath,
             vscode.TreeItemCollapsibleState.None
         );
         treeItem.eleFilePath = element.eleFilePath;
@@ -217,7 +218,7 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
         treeItem.fullPath = element.fullPath;
         treeItem.label = element.label;
         treeItem.isLeaf = true;
-        
+
         // 根据操作类型调用对应的命令
         if (operationType === 'click') {
             vscode.commands.executeCommand('eleTreeViewer.addClickOperation', treeItem);

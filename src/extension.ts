@@ -64,9 +64,14 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.executeCommand('eleSecondaryView.focus');
     });
 
-    const focusSecondaryViewCommand = vscode.commands.registerCommand('eleSecondaryView.focus', () => {
+    const focusSecondaryViewCommand = vscode.commands.registerCommand('eleSecondaryView.focus', async () => {
         // 显示对应的view container，然后聚焦到specific view
-        vscode.commands.executeCommand('workbench.view.extension.eleSecondaryViewContainer');
+        try {
+            await vscode.commands.executeCommand('workbench.view.extension.eleSecondaryViewContainer');
+        } catch (error) {
+            // 命令可能不存在，忽略错误
+            console.log('Secondary view container command not available');
+        }
     });
 
     // 创建状态栏按钮
@@ -74,7 +79,7 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarItem.text = "$(window) 辅助视图";
     statusBarItem.tooltip = "显示Ele Tree辅助视图";
     statusBarItem.command = 'eleTreeViewer.openSecondaryView';
-    
+
     // 默认显示状态栏按钮
     statusBarItem.show();
     // 监听文件变化
@@ -109,17 +114,20 @@ export function activate(context: vscode.ExtensionContext): void {
         fileWatcher
     );
     // 初始加载数据（webview自动处理）
-    
-    // 自动显示辅助视图容器
-    vscode.commands.executeCommand('workbench.view.extension.eleSecondaryViewContainer');
-    
+
+    // 自动显示辅助视图容器（静默处理，不报错）
+    vscode.commands.executeCommand('workbench.view.extension.eleSecondaryViewContainer').then(
+        () => { },
+        () => console.log('Secondary view container not available at startup')
+    );
+
     // 插件激活时进行一次初始刷新
     setTimeout(() => {
         console.log('Initial refresh on plugin activation...');
         eleTreeWebviewProvider.refresh();
         methodsTreeWebviewProvider.refresh();
     }, 500);
-    
+
     console.log('EasyTest插件已激活');
 }
 

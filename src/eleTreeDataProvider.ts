@@ -1,39 +1,7 @@
 import * as vscode from 'vscode';
-import { exec } from 'child_process';
-import * as path from 'path';
 import { TreeItem, TreeNode } from './treeItem';
 import { DragAndDropController } from './dragAndDropController';
-
-/**
- * 解析结果接口
- */
-export interface ParseResult {
-    results: FileResult[];
-    package_names: { [key: string]: string };
-}
-
-/**
- * 文件解析结果接口
- */
-export interface FileResult {
-    file_path: string;
-    class_name: string;
-    class_line: number;
-    base_classes: string[];
-    ele_variables: EleVariable[];
-}
-
-/**
- * Ele变量接口
- */
-export interface EleVariable {
-    name: string;
-    value: string;
-    line: number;
-    arguments: string[];
-    desc: string;
-    hierarchy: string[];
-}
+import { EleParser, ParseResult, FileResult, EleVariable } from './parseEle';
 
 /**
  * Ele变量树形数据提供者
@@ -41,7 +9,7 @@ export interface EleVariable {
 export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     public readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
-    
+
     private data: TreeItem[] = [];
     private originalData: TreeItem[] = []; // 存储原始数据
     private searchKeyword: string = ''; // 搜索关键词
@@ -86,33 +54,9 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
         }
     }
 
-    private parseEleFiles(workspacePath: string): Promise<ParseResult> {
-        return new Promise((resolve, reject) => {
-            const pythonScript = path.join(__filename, '..', '..', 'parse_ele.py');
-            const command = `python "${pythonScript}" "${workspacePath}"`;
-            
-            // 设置环境变量确保UTF-8编码
-            const env = { 
-                ...process.env,
-                PYTHONIOENCODING: 'utf-8',
-                PYTHONUTF8: '1'
-            };
-            
-            exec(command, { encoding: 'utf8', env }, (error: any, stdout: string, stderr: string) => {
-                if (error) {
-                    reject(error);
-                    return;
-                }
-                
-                try {
-                    const results = JSON.parse(stdout) as ParseResult;
-                    resolve(results);
-                } catch (parseError) {
-                    const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
-                    reject(new Error('解析Python输出失败: ' + errorMessage));
-                }
-            });
-        });
+    private async parseEleFiles(workspacePath: string): Promise<ParseResult> {
+        const parser = new EleParser(workspacePath);
+        return parser.parseAllFiles();
     }
 
     private buildTreeData(results: FileResult[]): TreeItem[] {
@@ -263,7 +207,7 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
             this.data = this.originalData;
             return;
         }
-        
+
         const filtered: TreeItem[] = [];
         for (const item of this.originalData) {
             const filteredItem = this.filterTreeItem(item, this.searchKeyword);
@@ -271,7 +215,7 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
                 filtered.push(filteredItem);
             }
         }
-        
+
         this.data = filtered;
     }
 
@@ -280,14 +224,14 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
      */
     private filterTreeItem(item: TreeItem, keyword: string): TreeItem | null {
         if (!item) { return null; }
-        
+
         const keywordLower = keyword.toLowerCase();
         const itemLabel = typeof item.label === 'string' ? item.label : (item.label?.label || '');
         const itemLabelLower = itemLabel.toLowerCase();
-        
+
         // 检查当前项是否匹配
         const currentMatches = itemLabelLower.includes(keywordLower);
-        
+
         // 递归过滤子项
         const filteredChildren: TreeItem[] = [];
         if (item.children) {
@@ -298,11 +242,11 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
                 }
             }
         }
-        
+
         // 如果当前项匹配或有匹配的子项，则包含此项
         if (currentMatches || filteredChildren.length > 0) {
             const newItem = new TreeItem(
-                itemLabel, 
+                itemLabel,
                 item.collapsibleState || vscode.TreeItemCollapsibleState.None
             );
             newItem.tooltip = item.tooltip;
@@ -315,15 +259,15 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
             newItem.eleLineNumber = item.eleLineNumber; // 复制Ele变量行号
             // 根据是否为叶子节点设置contextValue
             newItem.contextValue = item.isLeaf ? 'eleTreeLeaf' : 'eleTreeFolder';
-            
+
             // 如果有匹配的子项，设置为展开状态
             if (filteredChildren.length > 0) {
                 newItem.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
             }
-            
+
             return newItem;
         }
-        
+
         return null;
     }
 
@@ -374,8 +318,8 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
     private setAllNodesCollapsed(items: TreeItem[], collapsed: boolean): void {
         for (const item of items) {
             if (item.children && item.children.length > 0) {
-                item.collapsibleState = collapsed 
-                    ? vscode.TreeItemCollapsibleState.Collapsed 
+                item.collapsibleState = collapsed
+                    ? vscode.TreeItemCollapsibleState.Collapsed
                     : vscode.TreeItemCollapsibleState.Expanded;
                 this.setAllNodesCollapsed(item.children, collapsed);
             }
