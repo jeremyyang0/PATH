@@ -1,0 +1,11 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 元素树图标 - 树形结构带测试元素 -->
+  <path d="M4 4h4v4H4V4z" fill="currentColor"/>
+  <path d="M10 6h10v2H10V6z" fill="currentColor" opacity="0.8"/>
+  <path d="M8 10h4v4H8v-4z" fill="currentColor"/>
+  <path d="M14 12h6v2h-6v-2z" fill="currentColor" opacity="0.8"/>
+  <path d="M8 16h4v4H8v-4z" fill="currentColor"/>
+  <path d="M14 18h6v2h-6v-2z" fill="currentColor" opacity="0.8"/>
+  <path d="M6 8v4H4V8h2z" fill="currentColor" opacity="0.5"/>
+  <path d="M6 14v4H4v-4h2z" fill="currentColor" opacity="0.5"/>
+</svg>

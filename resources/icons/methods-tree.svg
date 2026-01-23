@@ -1,0 +1,6 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 方法树图标 - 函数/代码块样式 -->
+  <path d="M4 2v12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M4 4h2c1.5 0 2.5 1 2.5 2s-1 2-2.5 2H4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M10 6h4M10 10h3M10 14h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+</svg>

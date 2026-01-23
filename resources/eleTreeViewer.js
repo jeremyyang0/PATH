@@ -1,5 +1,5 @@
 // 获取VSCode API
-const vscode = (function() {
+const vscode = (function () {
     if (typeof acquireVsCodeApi !== 'undefined') {
         return acquireVsCodeApi();
     }
@@ -17,7 +17,7 @@ class DragDropManager {
         this.draggedElement = null;
         this.setupDragAndDrop();
     }
-    
+
     setupDragAndDrop() {
         // 为可拖拽元素添加事件监听
         document.addEventListener('dragstart', this.handleDragStart.bind(this));
@@ -25,7 +25,7 @@ class DragDropManager {
         document.addEventListener('drop', this.handleDrop.bind(this));
         document.addEventListener('dragend', this.handleDragEnd.bind(this));
     }
-    
+
     handleDragStart(event) {
         // 检查是否点击了右键菜单或其他交互元素
         if (event.target.closest('.context-menu') ||
@@ -33,50 +33,50 @@ class DragDropManager {
             event.preventDefault();
             return;
         }
-        
+
         const treeItem = event.target.closest('.tree-item');
         if (!treeItem || !treeItem.hasAttribute('data-codepath')) {
             event.preventDefault();
             return;
         }
-        
+
         // 允许从树项的大部分区域开始拖拽
         // 检查是否从展开图标开始（不允许）
         if (event.target.classList.contains('expand-icon')) {
             event.preventDefault();
             return;
         }
-        
+
         this.draggedElement = treeItem;
         const codePath = treeItem.getAttribute('data-codepath');
         const elementName = treeItem.getAttribute('data-label') || codePath;
-        
-        // 设置拖拽数据
-        event.dataTransfer.setData('text/plain', codePath);
+
+        // 设置拖拽数据（末尾添加换行符，方便连续拖入）
+        event.dataTransfer.setData('text/plain', codePath + '\n');
         event.dataTransfer.effectAllowed = 'copy';
-        
+
         // 设置拖拽图像文本
         event.dataTransfer.setData('application/vnd.code.tree', JSON.stringify({
             codePath: codePath,
             elementName: elementName,
             type: 'element'
         }));
-        
+
         // 添加拖拽样式
         treeItem.classList.add('dragging');
-        
+
         console.log('开始拖拽元素:', elementName);
     }
-    
+
     handleDragOver(event) {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'copy';
     }
-    
+
     handleDrop(event) {
         event.preventDefault();
         const codePath = event.dataTransfer.getData('text/plain');
-        
+
         if (codePath && vscode) {
             vscode.postMessage({
                 command: 'dragToEditor',
@@ -85,7 +85,7 @@ class DragDropManager {
             console.log('拖拽到编辑器:', codePath);
         }
     }
-    
+
     handleDragEnd(event) {
         if (this.draggedElement) {
             this.draggedElement.classList.remove('dragging');
@@ -155,16 +155,16 @@ function performSearch() {
 }
 
 // 监听搜索框回车事件
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('searchInput').addEventListener('keypress', function(e) {
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('searchInput').addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             performSearch();
         }
     });
-    
+
     // 初始化拖拽管理器
     dragDropManager = new DragDropManager();
-    
+
     // 页面加载完成后尝试恢复状态
     restoreState();
 });
@@ -231,7 +231,7 @@ function renderTree() {
         container.innerHTML = '<div class="no-results">没有找到匹配的结果</div>';
         return;
     }
-    
+
     let html = '';
     for (const item of filteredData) {
         html += renderTreeItem(item, 0);
@@ -244,53 +244,53 @@ function renderTreeItem(item, level) {
     const hasChildren = item.children && item.children.length > 0;
     const isExpanded = expandedItems.has(item.fullPath);
     const isLeaf = item.isLeaf;
-    
+
     let html = '<div class="tree-item ' + (isLeaf ? 'leaf' : 'folder') + '" data-path="' + escapeHtml(item.fullPath) + '"';
-    
+
     // 为叶子节点添加右键菜单、双击事件和拖拽属性
     if (isLeaf && item.eleFilePath) {
-        html += ' data-filepath="'+escapeHtml(item.eleFilePath)+'" data-line="'+item.eleLineNumber+'" data-codepath="'+escapeHtml(item.codePath || '')+'" data-variablename="'+escapeHtml(item.eleVariableName || '')+'" data-label="'+escapeHtml(item.label)+'"';
+        html += ' data-filepath="' + escapeHtml(item.eleFilePath) + '" data-line="' + item.eleLineNumber + '" data-codepath="' + escapeHtml(item.codePath || '') + '" data-variablename="' + escapeHtml(item.eleVariableName || '') + '" data-label="' + escapeHtml(item.label) + '"';
         html += ' oncontextmenu="showContextMenu(event, this)" ondblclick="openFileOnDoubleClick(this)"';
         // 添加拖拽属性
         html += ' draggable="true"';
     }
-    
+
     html += '>';
-    
+
     // 缩进
     for (let i = 0; i < level; i++) {
         html += '<span class="indent"></span>';
     }
-    
+
     // 展开/收起图标
     if (hasChildren) {
         html += '<span class="expand-icon ' + (isExpanded ? 'expanded' : 'expandable') + '" onclick="toggleExpand(\'' + escapeHtml(item.fullPath) + '\')"></span>';
     } else {
         html += '<span class="expand-icon leaf"></span>';
     }
-    
+
     // 标签
     html += '<span class="tree-label" onclick="selectItem(\'' + escapeHtml(item.fullPath) + '\')">' + escapeHtml(item.label) + '</span>';
-    
+
     // 操作按钮
     if (isLeaf && item.eleFilePath) {
         html += '<div class="tree-actions">';
-        html += '<button class="action-button" onclick="openFile(this)" data-filepath="'+escapeHtml(item.eleFilePath)+'" data-line="'+item.eleLineNumber+'" title="打开文件">📄</button>';
+        html += '<button class="action-button" onclick="openFile(this)" data-filepath="' + escapeHtml(item.eleFilePath) + '" data-line="' + item.eleLineNumber + '" title="打开文件">📄</button>';
         if (item.codePath) {
-            html += '<button class="action-button" onclick="dragToEditor(this)" data-codepath="'+escapeHtml(item.codePath)+'" title="添加到编辑器">📝</button>';
+            html += '<button class="action-button" onclick="dragToEditor(this)" data-codepath="' + escapeHtml(item.codePath) + '" title="添加到编辑器">📝</button>';
         }
         html += '</div>';
     }
-    
+
     html += '</div>';
-    
+
     // 渲染子项
     if (hasChildren && isExpanded) {
         for (const child of item.children) {
             html += renderTreeItem(child, level + 1);
         }
     }
-    
+
     return html;
 }
 
@@ -312,7 +312,7 @@ function selectItem(path) {
     if (selected) {
         selected.classList.remove('selected');
     }
-    
+
     // 添加新的选中状态
     const item = document.querySelector('[data-path="' + escapeHtml(path) + '"]');
     if (item) {
@@ -349,10 +349,10 @@ function dragToEditor(button) {
 function showContextMenu(event, element) {
     event.preventDefault();
     event.stopPropagation();
-    
+
     contextMenuTarget = element;
     const contextMenu = document.getElementById('contextMenu');
-    
+
     // 设置菜单位置
     contextMenu.style.left = event.pageX + 'px';
     contextMenu.style.top = event.pageY + 'px';
@@ -364,22 +364,22 @@ function showContextMenu(event, element) {
 function contextMenuAction(actionType) {
     const contextMenu = document.getElementById('contextMenu');
     contextMenu.style.display = 'none';
-    
+
     if (!contextMenuTarget) return;
-    
+
     const filePath = contextMenuTarget.getAttribute('data-filepath');
     const fullPath = contextMenuTarget.getAttribute('data-path');
     const variableName = contextMenuTarget.getAttribute('data-variablename');
     const label = contextMenuTarget.getAttribute('data-label');
-    
+
     console.log('Context menu action:', actionType, 'for element:', {
         filePath, fullPath, variableName, label
     });
-    
+
     if (vscode && filePath && fullPath && variableName) {
         vscode.postMessage({
             command: 'addOperation',
-            element: { 
+            element: {
                 fullPath: fullPath,
                 eleFilePath: filePath,
                 eleVariableName: variableName,
@@ -388,7 +388,7 @@ function contextMenuAction(actionType) {
             operationType: actionType === 'click' ? 'click' : 'double_click'
         });
     }
-    
+
     contextMenuTarget = null;
 }
 
@@ -396,7 +396,7 @@ function contextMenuAction(actionType) {
 function openFileOnDoubleClick(element) {
     const filePath = element.getAttribute('data-filepath');
     const lineNumber = parseInt(element.getAttribute('data-line'));
-    
+
     if (vscode && filePath) {
         vscode.postMessage({
             command: 'openFile',
@@ -407,7 +407,7 @@ function openFileOnDoubleClick(element) {
 }
 
 // 点击其他地方隐藏右键菜单
-document.addEventListener('click', function(event) {
+document.addEventListener('click', function (event) {
     const contextMenu = document.getElementById('contextMenu');
     if (contextMenu && !contextMenu.contains(event.target)) {
         contextMenu.style.display = 'none';

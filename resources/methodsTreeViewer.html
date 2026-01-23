@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,14 +14,14 @@
             margin: 0;
             padding: 8px;
         }
-        
+
         .search-container {
             display: flex;
             gap: 5px;
             margin-bottom: 10px;
             align-items: center;
         }
-        
+
         .search-input {
             flex: 1;
             background-color: var(--vscode-input-background);
@@ -30,13 +31,14 @@
             padding: 6px 8px;
             font-size: 13px;
         }
-        
+
         .search-input:focus {
             outline: none;
             border-color: var(--vscode-focusBorder);
         }
-        
-        .search-button, .clear-button {
+
+        .search-button,
+        .clear-button {
             background-color: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
@@ -45,23 +47,24 @@
             cursor: pointer;
             font-size: 12px;
         }
-        
-        .search-button:hover, .clear-button:hover {
+
+        .search-button:hover,
+        .clear-button:hover {
             background-color: var(--vscode-button-hoverBackground);
         }
-        
+
         .clear-button {
             background-color: var(--vscode-button-secondaryBackground);
             color: var(--vscode-button-secondaryForeground);
         }
-        
+
         .toolbar {
             display: flex;
             gap: 5px;
             margin-bottom: 10px;
             flex-wrap: wrap;
         }
-        
+
         .toolbar-button {
             background-color: var(--vscode-button-secondaryBackground);
             color: var(--vscode-button-secondaryForeground);
@@ -71,19 +74,19 @@
             cursor: pointer;
             font-size: 11px;
         }
-        
+
         .toolbar-button:hover {
             background-color: var(--vscode-button-secondaryHoverBackground);
         }
-        
+
         .tree-container {
             border: 1px solid var(--vscode-panel-border);
             border-radius: 3px;
-            background-color: var(--vscode-list-activeSelectionBackground);
+            background-color: transparent;
             max-height: calc(100vh - 120px);
             overflow-y: auto;
         }
-        
+
         .tree-item {
             display: flex;
             align-items: center;
@@ -92,30 +95,30 @@
             user-select: none;
             border-bottom: 1px solid var(--vscode-panel-border);
         }
-        
+
         .tree-item:hover {
             background-color: var(--vscode-list-hoverBackground);
         }
-        
+
         .tree-item.selected {
             background-color: var(--vscode-list-activeSelectionBackground);
-            color: var(--vscode-list-activeSelectionForeground);
+            color: #ffffff;
         }
-        
+
         .tree-item.leaf {
             color: var(--vscode-symbolIcon-methodForeground);
         }
-        
+
         .tree-item.folder {
             color: var(--vscode-symbolIcon-folderForeground);
             font-weight: 500;
         }
-        
+
         .indent {
             display: inline-block;
             width: 16px;
         }
-        
+
         .expand-icon {
             display: inline-block;
             width: 16px;
@@ -125,20 +128,20 @@
             line-height: 16px;
             font-size: 12px;
         }
-        
+
         .expand-icon.expandable:before {
             content: "▶";
         }
-        
+
         .expand-icon.expanded:before {
             content: "▼";
         }
-        
+
         .expand-icon.leaf:before {
             content: "⚬";
             color: var(--vscode-symbolIcon-methodForeground);
         }
-        
+
         .tree-label {
             flex: 1;
             padding-left: 4px;
@@ -146,16 +149,16 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        
+
         .tree-actions {
             display: none;
             gap: 4px;
         }
-        
+
         .tree-item:hover .tree-actions {
             display: flex;
         }
-        
+
         .action-button {
             background: none;
             border: none;
@@ -165,40 +168,40 @@
             border-radius: 2px;
             font-size: 12px;
         }
-        
+
         .action-button:hover {
             background-color: var(--vscode-toolbar-hoverBackground);
         }
-        
+
         .loading {
             text-align: center;
             padding: 20px;
             color: var(--vscode-descriptionForeground);
         }
-        
+
         .no-results {
             text-align: center;
             padding: 20px;
             color: var(--vscode-descriptionForeground);
             font-style: italic;
         }
-        
+
         /* 拖拽样式 */
         .tree-item[draggable="true"] {
             cursor: grab;
         }
-        
+
         .tree-item[draggable="true"]:active {
             cursor: grabbing;
         }
-        
+
         /* 排除特定区域的拖拽光标 */
         .tree-item[draggable="true"] .expand-icon,
         .tree-item[draggable="true"] .tree-actions,
         .tree-item[draggable="true"] .action-button {
             cursor: pointer;
         }
-        
+
         .tree-item.dragging {
             opacity: 0.6;
             background-color: var(--vscode-list-dropBackground);
@@ -206,7 +209,7 @@
             transform: scale(0.98);
             transition: all 0.2s ease;
         }
-        
+
         /* 拖拽提示 */
         .tree-item[draggable="true"]:hover::after {
             content: "拖拽到编辑器";
@@ -225,16 +228,16 @@
             z-index: 1000;
             pointer-events: none;
         }
-        
+
         /* 悬停时隐藏提示，避免与按钮冲突 */
         .tree-item[draggable="true"]:hover .tree-actions {
             display: flex;
         }
-        
-        .tree-item[draggable="true"]:hover .tree-actions ~ ::after {
+
+        .tree-item[draggable="true"]:hover .tree-actions~ ::after {
             display: none;
         }
-        
+
         /* 确保按钮区域保持正常光标 */
         .tree-actions,
         .action-button {
@@ -242,23 +245,25 @@
         }
     </style>
 </head>
+
 <body>
     <div class="search-container">
         <input type="text" class="search-input" id="searchInput" placeholder="搜索方法（支持中文描述或方法名）">
         <button class="search-button" onclick="performSearch()">搜索</button>
         <button class="clear-button" onclick="clearSearch()">清除</button>
     </div>
-    
+
     <div class="toolbar">
         <button class="toolbar-button" onclick="refreshData()">🔄 刷新</button>
         <button class="toolbar-button" onclick="expandAll()">📂 展开全部</button>
         <button class="toolbar-button" onclick="collapseAll()">📁 收起全部</button>
     </div>
-    
+
     <div class="tree-container" id="treeContainer">
         <div class="loading">正在加载数据...</div>
     </div>
-    
+
     <script src="methodsTreeViewer.js"></script>
 </body>
-</html> 
+
+</html>

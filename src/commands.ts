@@ -6,23 +6,46 @@ import { generateMethodCode } from './utils';
 /**
  * 在当前编辑器的光标位置插入文本，自动继承上一行缩进，并在末尾换行
  */
-export function insertTextAtCursor(text: string): void {
+export async function insertTextAtCursor(text: string): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
         vscode.window.showWarningMessage('没有打开的编辑器');
         return;
     }
-    const selection = editor.selection;
-    const position = selection.active;
-    // 获取当前行的缩进
-    const line = editor.document.lineAt(position.line - 1);
-    const indentMatch = line.text.match(/^\s*/);
-    const indent = indentMatch ? indentMatch[0] : '';
-    // 插入内容前加缩进，末尾加换行
+
+    const position = editor.selection.active;
+    const currentLine = editor.document.lineAt(position.line);
+
+    // 获取上一行的缩进（如果上一行存在且不为空）
+    let indent = '';
+    if (position.line > 0) {
+        const prevLine = editor.document.lineAt(position.line - 1);
+        const indentMatch = prevLine.text.match(/^\s*/);
+        indent = indentMatch ? indentMatch[0] : '';
+    }
+
+    // 如果当前行有内容，获取当前行的缩进
+    if (currentLine.text.trim().length > 0) {
+        const currentIndentMatch = currentLine.text.match(/^\s*/);
+        indent = currentIndentMatch ? currentIndentMatch[0] : indent;
+    }
+
+    // 构建插入文本：缩进 + 代码 + 换行
     const insertText = `${indent}${text}()\n`;
-    editor.edit(editBuilder => {
-        editBuilder.insert(position, insertText);
+
+    // 插入文本
+    const success = await editor.edit(editBuilder => {
+        // 在当前行开始位置插入
+        const insertPosition = new vscode.Position(position.line, 0);
+        editBuilder.insert(insertPosition, insertText);
     });
+
+    if (success) {
+        // 移动光标到新插入的下一行，保持相同缩进位置
+        const newPosition = new vscode.Position(position.line + 1, indent.length);
+        editor.selection = new vscode.Selection(newPosition, newPosition);
+        editor.revealRange(new vscode.Range(newPosition, newPosition));
+    }
 }
 
 /**
@@ -57,7 +80,7 @@ export async function addOperationToAtomicFile(element: TreeItem, operationType:
             return;
         }
         const eleDesc = typeof element.label === 'string' ? element.label : (element.label?.label || element.eleVariableName || 'unknown');
-        
+
         const { methodName, methodCode } = generateMethodCode(element.eleVariableName, operationType, eleDesc);
         // 调用addMethodToFile，判断是否已存在
         const result = await addMethodToFile(atomicFilePath, methodCode, element.eleFilePath, methodName);
