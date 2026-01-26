@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { insertTextAtCursor, openFileAtLine, addOperationToAtomicFile } from './commands';
+import { createCase } from './createCase';
 import { TreeItem } from './treeItem';
 import { SecondaryViewProvider } from './secondaryViewProvider';
 import { EleTreeWebviewProvider } from './eleTreeWebviewProvider';
@@ -74,6 +75,11 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
 
+    // 注册创建用例命令
+    const createCaseCommand = vscode.commands.registerCommand('eleTreeViewer.createCase', async (uri: vscode.Uri) => {
+        await createCase(uri);
+    });
+
     // 创建状态栏按钮
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     statusBarItem.text = "$(window) 辅助视图";
@@ -110,6 +116,7 @@ export function activate(context: vscode.ExtensionContext): void {
         jumpToMethodCommand,
         openSecondaryViewCommand,
         focusSecondaryViewCommand,
+        createCaseCommand,
         statusBarItem,
         fileWatcher
     );

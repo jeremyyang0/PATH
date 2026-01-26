@@ -60,6 +60,9 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
                 case 'getState':
                     this._handleGetState();
                     break;
+                case 'openInitFile':
+                    this._handleOpenInitFile(data.folderPath);
+                    break;
             }
         });
 
@@ -82,21 +85,21 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
         try {
             const htmlPath = path.join(this._extensionUri.fsPath, 'resources', 'methodsTreeViewer.html');
             console.log('Reading HTML file from:', htmlPath);
-            
+
             if (!fs.existsSync(htmlPath)) {
                 console.error('HTML file not found:', htmlPath);
                 throw new Error(`HTML file not found: ${htmlPath}`);
             }
-            
+
             let html = fs.readFileSync(htmlPath, 'utf8');
-            
+
             // 获取资源URI
             const jsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'methodsTreeViewer.js'));
             console.log('JS URI:', jsUri.toString());
-            
+
             // 替换资源路径
             html = html.replace('src="methodsTreeViewer.js"', `src="${jsUri}"`);
-            
+
             return html;
         } catch (error) {
             console.error('Error loading HTML for methodsTreeViewer:', error);
@@ -227,6 +230,29 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
             this._view.webview.postMessage({
                 command: 'requestState'
             });
+        }
+    }
+
+    private async _handleOpenInitFile(folderPath: string) {
+        // folderPath 是点分隔的模块路径，如 "logic.logic_editor.dialog"
+        // 需要转换为实际文件系统路径
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showWarningMessage('未找到工作区文件夹');
+            return;
+        }
+
+        // 将点分隔的路径转换为文件系统路径
+        const relativePath = folderPath.replace(/\./g, path.sep);
+        const fullFolderPath = path.join(workspaceFolder.uri.fsPath, 'method', relativePath);
+        const initFilePath = path.join(fullFolderPath, '__init__.py');
+
+        console.log('Opening __init__.py:', initFilePath);
+
+        if (fs.existsSync(initFilePath)) {
+            await vscode.commands.executeCommand('methodsViewer.openFile', initFilePath, 1);
+        } else {
+            vscode.window.showWarningMessage(`文件不存在: ${initFilePath}`);
         }
     }
 

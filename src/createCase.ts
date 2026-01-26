@@ -1,0 +1,167 @@
+import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
+import { getCaseInfo, ZentaoCaseInfo } from './zentaoService';
+
+/**
+ * 创建测试用例文件
+ * @param uri 右键点击的文件夹URI
+ */
+export async function createCase(uri: vscode.Uri): Promise<void> {
+    // 获取目标文件夹路径
+    let targetFolder: string;
+
+    if (uri) {
+        // 如果是右键点击文件夹，使用该文件夹
+        const stat = await vscode.workspace.fs.stat(uri);
+        if (stat.type === vscode.FileType.Directory) {
+            targetFolder = uri.fsPath;
+        } else {
+            // 如果点击的是文件，使用其所在文件夹
+            targetFolder = path.dirname(uri.fsPath);
+        }
+    } else {
+        // 如果没有传入URI，尝试使用工作区根目录
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            vscode.window.showErrorMessage('请打开一个工作区文件夹');
+            return;
+        }
+        targetFolder = workspaceFolders[0]!.uri.fsPath;
+    }
+
+    // 弹出输入框，要求输入禅道ID
+    const zentaoId = await vscode.window.showInputBox({
+        prompt: '请输入禅道ID',
+        placeHolder: '例如: 12345',
+        validateInput: (value: string) => {
+            if (!value || value.trim() === '') {
+                return '禅道ID不能为空';
+            }
+            if (!/^\d+$/.test(value.trim())) {
+                return '禅道ID必须为数字';
+            }
+            return null;
+        }
+    });
+
+    // 用户取消输入
+    if (zentaoId === undefined) {
+        return;
+    }
+
+    // 弹出输入框，要求输入应用名称
+    const appName = await vscode.window.showInputBox({
+        prompt: '请输入应用名称',
+        placeHolder: '例如: Logic, Layout, Router',
+        validateInput: (value: string) => {
+            if (!value || value.trim() === '') {
+                return '应用名称不能为空';
+            }
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value.trim())) {
+                return '应用名称必须为英文（字母、数字、下划线，且不能以数字开头）';
+            }
+            return null;
+        }
+    });
+
+    // 用户取消输入
+    if (appName === undefined) {
+        return;
+    }
+
+    const trimmedId = zentaoId.trim();
+    const trimmedAppName = appName.trim();
+
+    // 尝试从禅道获取用例信息
+    let caseInfo: ZentaoCaseInfo | null = null;
+    try {
+        caseInfo = await getCaseInfo(trimmedId);
+    } catch (error) {
+        console.log('获取禅道用例信息失败:', error);
+    }
+
+    // 获取文件夹名称
+    const folderName = path.basename(targetFolder);
+
+    // 查找现有文件，计算自增ID
+    const existingFiles = fs.readdirSync(targetFolder);
+    const pattern = new RegExp(`^test_${folderName}_(\\d{3})\\.py$`);
+    let maxId = 0;
+    for (const file of existingFiles) {
+        const match = file.match(pattern);
+        if (match) {
+            const id = parseInt(match[1]!, 10);
+            if (id > maxId) {
+                maxId = id;
+            }
+        }
+    }
+    const nextId = (maxId + 1).toString().padStart(3, '0');
+    const testName = `test_${folderName}_${nextId}`;
+    const fileName = `${testName}.py`;
+    const filePath = path.join(targetFolder, fileName);
+
+    // 检查文件是否已存在
+    if (fs.existsSync(filePath)) {
+        const overwrite = await vscode.window.showWarningMessage(
+            `文件 ${fileName} 已存在，是否覆盖？`,
+            '覆盖',
+            '取消'
+        );
+        if (overwrite !== '覆盖') {
+            return;
+        }
+    }
+
+    // 构建用例标题和前置条件
+    const caseTitle = caseInfo?.title || `测试用例 #${trimmedId}`;
+    const precondition = caseInfo?.precondition || '';
+
+    // 构建前置条件注释
+    let preconditionComment = '';
+    if (precondition) {
+        preconditionComment = `\n前置条件: ${precondition}`;
+    }
+
+    // 构建步骤注释
+    let stepsComment = '';
+    if (caseInfo?.steps && caseInfo.steps.length > 0) {
+        const stepsLines = caseInfo.steps.map(step => {
+            return `        # 步骤 ${step.desc}\n        # 预期 ${step.expect}\n        `;
+        });
+        stepsComment = stepsLines.join('\n');
+    } else {
+        stepsComment = '        # TODO: 实现逻辑';
+    }
+
+    // 创建测试用例文件内容
+    const fileContent = `# -*- coding: utf-8 -*-
+"""
+测试用例文件: ${testName}.py
+禅道ID: ${trimmedId}
+用例标题: ${caseTitle}${preconditionComment}
+"""
+from method.${trimmedAppName.toLowerCase()} import ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export
+from case.base_case import BaseCase
+
+class Test${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}(BaseCase):
+
+    def ${testName}(self, ${trimmedAppName.toLowerCase()}: ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export):
+        """${caseTitle}"""
+${stepsComment}
+`;
+
+    try {
+        // 写入文件
+        fs.writeFileSync(filePath, fileContent, 'utf8');
+
+        // 打开创建的文件
+        const document = await vscode.workspace.openTextDocument(filePath);
+        await vscode.window.showTextDocument(document);
+
+        vscode.window.showInformationMessage(`测试用例文件已创建: ${fileName}`);
+    } catch (error) {
+        vscode.window.showErrorMessage(`创建文件失败: ${error}`);
+    }
+}

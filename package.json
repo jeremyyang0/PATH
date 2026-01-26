@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python自动化测试助手 - 智能解析Ele变量和方法，提供树形结构浏览和自动化测试代码生成",
-  "version": "1.1.0",
+  "version": "1.2.3",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -130,6 +130,10 @@
       {
         "command": "eleSecondaryView.focus",
         "title": "显示辅助视图"
+      },
+      {
+        "command": "eleTreeViewer.createCase",
+        "title": "Create Case (创建用例)"
       }
     ],
     "menus": {
@@ -144,7 +148,33 @@
           "when": "view == methodsViewer",
           "group": "navigation"
         }
+      ],
+      "explorer/context": [
+        {
+          "command": "eleTreeViewer.createCase",
+          "group": "2_workspace"
+        }
       ]
+    },
+    "configuration": {
+      "title": "PATH Plugin Settings",
+      "properties": {
+        "path.zentao.host": {
+          "type": "string",
+          "default": "",
+          "description": "禅道服务器地址 (例如: 10.0.18.30)"
+        },
+        "path.zentao.username": {
+          "type": "string",
+          "default": "",
+          "description": "禅道用户名"
+        },
+        "path.zentao.password": {
+          "type": "string",
+          "default": "",
+          "description": "禅道密码"
+        }
+      }
     }
   },
   "scripts": {

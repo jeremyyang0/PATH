@@ -255,6 +255,9 @@ function renderTreeItem(item, level) {
         html += ' ondblclick="jumpToMethodOnDoubleClick(this)"';
         // 添加拖拽属性
         html += ' draggable="true"';
+    } else if (!isLeaf) {
+        // 为文件夹节点添加双击事件打开__init__.py
+        html += ' ondblclick="openFolderOnDoubleClick(this)"';
     }
 
     html += '>';
@@ -319,6 +322,17 @@ function selectItem(path) {
     const item = document.querySelector('[data-path="' + escapeHtml(path) + '"]');
     if (item) {
         item.classList.add('selected');
+    }
+}
+
+// 双击文件夹打开__init__.py
+function openFolderOnDoubleClick(element) {
+    const folderPath = element.getAttribute('data-path');
+    if (vscode && folderPath) {
+        vscode.postMessage({
+            command: 'openInitFile',
+            folderPath: folderPath
+        });
     }
 }
 
