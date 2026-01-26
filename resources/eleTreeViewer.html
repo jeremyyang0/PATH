@@ -277,10 +277,18 @@
         <div class="loading">正在加载数据...</div>
     </div>
 
-    <!-- 右键菜单 -->
+    <!-- 右键菜单 (叶子节点) -->
     <div class="context-menu" id="contextMenu">
         <div class="context-menu-item" onclick="contextMenuAction('click')">👆 点击</div>
         <div class="context-menu-item" onclick="contextMenuAction('doubleClick')">👆👆 双击</div>
+    </div>
+
+    <!-- 右键菜单 (父节点/类节点) -->
+    <div class="context-menu" id="parentContextMenu">
+        <div class="context-menu-item" onclick="parentContextMenuAction('click')">👆 一键生成点击方法</div>
+        <div class="context-menu-item" onclick="parentContextMenuAction('double_click')">👆👆 一键生成双击方法</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" onclick="parentContextMenuAction('all')">🔧 一键生成全部方法</div>
     </div>
 
     <script src="eleTreeViewer.js"></script>

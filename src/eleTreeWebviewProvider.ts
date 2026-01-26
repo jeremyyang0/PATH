@@ -4,6 +4,8 @@ import * as path from 'path';
 import { EleTreeDataProvider } from './eleTreeDataProvider';
 import { ParseResult, FileResult, EleVariable } from './parseEle';
 import { TreeItem } from './treeItem';
+import { getAtomicFilePath, addMethodToFile } from './fileOperations';
+import { generateMethodCode } from './utils';
 
 export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'eleTreeViewer';
@@ -54,6 +56,9 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'addOperation':
                     this._handleAddOperation(data.element, data.operationType);
+                    break;
+                case 'batchAddOperation':
+                    this._handleBatchAddOperation(data.elements, data.operationType);
                     break;
                 case 'saveState':
                     this._handleSaveState(data.state);
@@ -227,6 +232,95 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
         } else {
             console.error('Unknown operation type:', operationType);
         }
+    }
+
+    private async _handleBatchAddOperation(elements: any[], operationType: string) {
+        console.log('_handleBatchAddOperation called with:', elements.length, 'elements, type:', operationType);
+
+        if (!elements || elements.length === 0) {
+            vscode.window.showWarningMessage('没有找到可生成方法的元素');
+            return;
+        }
+
+        const operationTypes: ('click' | 'double_click')[] = [];
+        if (operationType === 'all') {
+            operationTypes.push('click', 'double_click');
+        } else if (operationType === 'click' || operationType === 'double_click') {
+            operationTypes.push(operationType);
+        } else {
+            console.error('Unknown operation type:', operationType);
+            return;
+        }
+
+        let successCount = 0;
+        let skipCount = 0;
+        let errorCount = 0;
+
+        // 按文件分组处理元素
+        const elementsByFile: { [filePath: string]: any[] } = {};
+        for (const element of elements) {
+            const eleFilePath = element.eleFilePath;
+            if (!eleFilePath) continue;
+
+            const atomicFilePath = getAtomicFilePath(eleFilePath);
+            if (!atomicFilePath) continue;
+
+            if (!elementsByFile[atomicFilePath]) {
+                elementsByFile[atomicFilePath] = [];
+            }
+            elementsByFile[atomicFilePath].push(element);
+        }
+
+        // 逐个文件处理
+        for (const [atomicFilePath, fileElements] of Object.entries(elementsByFile)) {
+            for (const element of fileElements) {
+                for (const opType of operationTypes) {
+                    try {
+                        const eleDesc = element.label || element.eleVariableName || 'unknown';
+                        const { methodName, methodCode } = generateMethodCode(element.eleVariableName, opType, eleDesc);
+
+                        console.log('Generating method:', methodName, 'for element:', element.eleVariableName);
+
+                        const result = await addMethodToFile(atomicFilePath, methodCode, element.eleFilePath, methodName);
+
+                        if (result.existed) {
+                            console.log('Method already exists:', methodName);
+                            skipCount++;
+                        } else {
+                            console.log('Method generated successfully:', methodName);
+                            successCount++;
+                        }
+                    } catch (error) {
+                        console.error('Error generating method:', error);
+                        errorCount++;
+                    }
+                }
+            }
+        }
+
+        // 打开最后一个处理的文件
+        const filePaths = Object.keys(elementsByFile);
+        if (filePaths.length > 0) {
+            const lastFilePath = filePaths[filePaths.length - 1];
+            if (lastFilePath) {
+                try {
+                    const document = await vscode.workspace.openTextDocument(lastFilePath);
+                    await vscode.window.showTextDocument(document);
+                } catch (e) {
+                    console.error('Error opening file:', e);
+                }
+            }
+        }
+
+        const opName = operationType === 'all' ? '点击和双击' : (operationType === 'click' ? '点击' : '双击');
+        let message = `批量生成完成: ${successCount} 个${opName}方法已生成`;
+        if (skipCount > 0) {
+            message += `, ${skipCount} 个已存在`;
+        }
+        if (errorCount > 0) {
+            message += `, ${errorCount} 个失败`;
+        }
+        vscode.window.showInformationMessage(message);
     }
 
     private _handleSaveState(state: any) {

@@ -97,6 +97,7 @@ class DragDropManager {
 // 初始化拖拽管理器
 let dragDropManager;
 let contextMenuTarget = null; // 右键菜单目标元素
+let parentContextMenuTarget = null; // 父节点右键菜单目标数据
 
 // 状态保存和恢复功能
 function saveState() {
@@ -253,6 +254,9 @@ function renderTreeItem(item, level) {
         html += ' oncontextmenu="showContextMenu(event, this)" ondblclick="openFileOnDoubleClick(this)"';
         // 添加拖拽属性
         html += ' draggable="true"';
+    } else if (hasChildren) {
+        // 为父节点添加右键菜单 (用于批量生成方法)
+        html += ' oncontextmenu="showParentContextMenu(event, \'' + escapeHtml(item.fullPath) + '\')"';
     }
 
     html += '>';
@@ -413,7 +417,100 @@ document.addEventListener('click', function (event) {
         contextMenu.style.display = 'none';
         contextMenuTarget = null;
     }
+    const parentContextMenu = document.getElementById('parentContextMenu');
+    if (parentContextMenu && !parentContextMenu.contains(event.target)) {
+        parentContextMenu.style.display = 'none';
+        parentContextMenuTarget = null;
+    }
 });
+
+// 显示父节点右键菜单
+function showParentContextMenu(event, path) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // 隐藏叶子节点的右键菜单
+    document.getElementById('contextMenu').style.display = 'none';
+
+    // 找到对应的节点数据
+    function findNodeByPath(items, targetPath) {
+        for (const item of items) {
+            if (item.fullPath === targetPath) {
+                return item;
+            }
+            if (item.children && item.children.length > 0) {
+                const found = findNodeByPath(item.children, targetPath);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    const node = findNodeByPath(filteredData, path);
+    if (!node) return;
+
+    parentContextMenuTarget = node;
+    const parentContextMenu = document.getElementById('parentContextMenu');
+
+    // 设置菜单位置
+    parentContextMenu.style.left = event.pageX + 'px';
+    parentContextMenu.style.top = event.pageY + 'px';
+    parentContextMenu.style.display = 'block';
+    return false;
+}
+
+// 收集所有叶子节点
+function collectLeafChildren(node) {
+    const leaves = [];
+    console.log('collectLeafChildren called for node:', node.fullPath, 'children count:', node.children ? node.children.length : 0);
+    function collect(item, depth) {
+        console.log('  '.repeat(depth) + 'Checking item:', item.fullPath || item.label, 'isLeaf:', item.isLeaf, 'eleFilePath:', item.eleFilePath, 'eleVariableName:', item.eleVariableName);
+        if (item.isLeaf && item.eleFilePath && item.eleVariableName) {
+            console.log('  '.repeat(depth) + '  -> Found leaf!');
+            leaves.push({
+                fullPath: item.fullPath,
+                eleFilePath: item.eleFilePath,
+                eleVariableName: item.eleVariableName,
+                label: item.label
+            });
+        }
+        if (item.children && item.children.length > 0) {
+            console.log('  '.repeat(depth) + '  -> Has', item.children.length, 'children, recursing...');
+            for (const child of item.children) {
+                collect(child, depth + 1);
+            }
+        }
+    }
+    collect(node, 0);
+    console.log('collectLeafChildren result: found', leaves.length, 'leaves');
+    return leaves;
+}
+
+// 父节点右键菜单操作
+function parentContextMenuAction(actionType) {
+    const parentContextMenu = document.getElementById('parentContextMenu');
+    parentContextMenu.style.display = 'none';
+
+    if (!parentContextMenuTarget) return;
+
+    const leaves = collectLeafChildren(parentContextMenuTarget);
+    if (leaves.length === 0) {
+        console.log('No leaf elements found under this node');
+        return;
+    }
+
+    console.log('Batch action:', actionType, 'for', leaves.length, 'elements');
+
+    if (vscode) {
+        vscode.postMessage({
+            command: 'batchAddOperation',
+            elements: leaves,
+            operationType: actionType
+        });
+    }
+
+    parentContextMenuTarget = null;
+}
 
 // 监听来自扩展的消息
 window.addEventListener('message', event => {

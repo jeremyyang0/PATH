@@ -42,69 +42,83 @@ export async function addMethodToFile(filePath: string, methodCode: string, eleF
         const fs = require('fs').promises;
         let fileContent = '';
         let fileExists = false;
+        console.log('addMethodToFile called:', { filePath, eleFilePath, methodName });
         try {
             fileContent = await fs.readFile(filePath, 'utf8');
             fileExists = true;
+            console.log('File exists, read content length:', fileContent.length);
         } catch (error) {
+            console.log('File does not exist, creating new file...');
             const eleClassName = getEleClassName(eleFilePath);
+            console.log('eleClassName:', eleClassName);
             if (!eleClassName) {
                 throw new Error('无法获取Ele类名');
             }
             const baseClassName = generateBaseClassName(filePath);
             const importPath = generateImportPath(eleFilePath);
-            fileContent = `from ${importPath} import ${eleClassName}
-
-class ${baseClassName}(${eleClassName}):
-    """基础${path.basename(filePath, '.py')}方法"""
+            const realClassName = baseClassName.replace('_Base', '');
+            console.log('baseClassName:', baseClassName, 'importPath:', importPath);
+            fileContent = `from ${importPath} import ${eleClassName}\r
+from richlogger import auto_logger
+\r
+class ${baseClassName}(${eleClassName}):\r
+    """${toPascalCase(path.basename(filePath, '.py'))}原子方法"""\r
+\r
+@auto_logger
+class ${realClassName}(${baseClassName}):\r
+    """${toPascalCase(path.basename(filePath, '.py'))}组合方法"""\r
 `;
+            console.log('Generated initial file content:', fileContent);
         }
         // 检查方法是否已存在
         if (methodName) {
             const methodPattern = new RegExp(`def\\s+${methodName}\\s*\\(`);
             const match = methodPattern.exec(fileContent);
             if (match) {
-                // 方法已存在，绝不插入新方法
+                // 方法已存在，不插入新方法
                 return { existed: true, position: match.index };
             }
         }
         // 只在方法不存在时插入
         const lines = fileContent.split('\n');
         let insertIndex = lines.length;
-        if (fileExists) {
-            let baseClassFound = false;
-            let indentLevel = 0;
-            const baseClassName = generateBaseClassName(filePath);
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                if (line && line.trim().startsWith(`class ${baseClassName}(`) && line.trim().endsWith(':')) {
-                    baseClassFound = true;
-                    indentLevel = line.length - line.trimStart().length;
-                    continue;
-                }
-                if (baseClassFound && line) {
-                    const currentIndent = line.length - line.trimStart().length;
-                    if ((line.trim().startsWith('class ') && currentIndent <= indentLevel) || i === lines.length - 1) {
-                        // 如果找到下一个class，需要检查是否有装饰器，从装饰器开始排除
-                        let classStartIndex = i;
-                        if (line.trim().startsWith('class ') && i > 0) {
-                            // 向前查找可能的装饰器
-                            for (let j = i - 1; j >= 0; j--) {
-                                const prevLine = lines[j];
-                                if (!prevLine || prevLine.trim() === '') {
-                                    // 空行，继续向前查找
-                                    continue;
-                                } else if (prevLine.trim().startsWith('@')) {
-                                    // 找到装饰器，继续向前查找更多装饰器
-                                    classStartIndex = j;
-                                } else {
-                                    // 既不是空行也不是装饰器，停止查找
-                                    break;
-                                }
-                            }
+        // 查找 _BaseXxxMethod 类的结束位置（下一个 class 或 @装饰器之前）
+        let baseClassFound = false;
+        let indentLevel = 0;
+        const baseClassName = generateBaseClassName(filePath);
+        console.log('Looking for baseClassName:', baseClassName);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line && line.trim().startsWith(`class ${baseClassName}(`) && line.trim().endsWith(':')) {
+                baseClassFound = true;
+                indentLevel = line.length - line.trimStart().length;
+                console.log('Found baseClass at line:', i, 'indentLevel:', indentLevel);
+                continue;
+            }
+            if (baseClassFound && line) {
+                const currentIndent = line.length - line.trimStart().length;
+                // 如果找到下一个class或装饰器，需要在它之前插入
+                if ((line.trim().startsWith('class ') && currentIndent <= indentLevel) ||
+                    (line.trim().startsWith('@') && currentIndent <= indentLevel)) {
+                    // 如果找到装饰器或class，向前查找跳过空行
+                    let classStartIndex = i;
+                    for (let j = i - 1; j >= 0; j--) {
+                        const prevLine = lines[j];
+                        if (!prevLine || prevLine.trim() === '') {
+                            classStartIndex = j;
+                        } else if (prevLine.trim().startsWith('@')) {
+                            classStartIndex = j;
+                        } else {
+                            break;
                         }
-                        insertIndex = line.trim().startsWith('class ') ? classStartIndex : i + 1;
-                        break;
                     }
+                    insertIndex = classStartIndex;
+                    console.log('Insert before next class/decorator at line:', insertIndex);
+                    break;
+                } else if (i === lines.length - 1) {
+                    insertIndex = i + 1;
+                    console.log('Insert at end of file, line:', insertIndex);
+                    break;
                 }
             }
         }

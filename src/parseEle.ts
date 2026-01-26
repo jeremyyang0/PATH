@@ -247,48 +247,84 @@ export class EleParser {
                         eleVariables = [];
                     }
 
-                    // Check Ele variable definition
-                    // Supports both single-line and multi-line definitions
-                    // Match "name = Ele(" start
-                    const eleStartRegex = /^\s+(\w+)\s*=\s*Ele\s*\(/;
-                    const eleStartMatch = line.match(eleStartRegex);
+                    // 检查 @property 装饰器
+                    // 新格式: @property + def name(self): + return Ele(...)
+                    const propertyDecoratorRegex = /^\s+@property\s*$/;
+                    const propertyMatch = line.match(propertyDecoratorRegex);
 
-                    if (eleStartMatch && eleStartMatch[1] && currentClass) {
-                        const varName = eleStartMatch[1];
-                        let fullStatement = line;
-                        let currentLineIdx = i;
+                    if (propertyMatch && currentClass) {
+                        // 检查下一行是否为 def name(self):
+                        const nextLineIdx = i + 1;
+                        if (nextLineIdx < lines.length) {
+                            const defLine = lines[nextLineIdx];
+                            if (defLine === undefined) continue;
 
-                        // Check if parentheses are balanced
-                        let openParens = (fullStatement.match(/\(/g) || []).length;
-                        let closeParens = (fullStatement.match(/\)/g) || []).length;
+                            const defRegex = /^\s+def\s+(\w+)\s*\(\s*self\s*\)\s*:/;
+                            const defMatch = defLine.match(defRegex);
 
-                        // If not balanced, read subsequent lines
-                        while (openParens > closeParens && currentLineIdx < lines.length - 1) {
-                            currentLineIdx++;
-                            const nextLine = lines[currentLineIdx];
-                            fullStatement += '\n' + nextLine;
+                            if (defMatch && defMatch[1]) {
+                                const varName = defMatch[1];
+                                const defLineNumber = nextLineIdx + 1;
 
-                            if (nextLine !== undefined) {
-                                openParens += (nextLine.match(/\(/g) || []).length;
-                                closeParens += (nextLine.match(/\)/g) || []).length;
-                            }
-                        }
+                                // 查找方法体中的 return Ele(...) 语句
+                                let foundEle = false;
+                                let fullStatement = '';
+                                let eleStartLineIdx = -1;
 
-                        // Advance the main loop index to skip processed lines
-                        i = currentLineIdx;
+                                for (let j = nextLineIdx + 1; j < lines.length; j++) {
+                                    const methodLine = lines[j];
+                                    if (methodLine === undefined) break;
 
-                        // Extract arguments content from "Ele(...)"
-                        // Match the first "Ele(" and the last ")"
-                        const firstParenIndex = fullStatement.indexOf('Ele(') + 3; // Index of '(', which is Ele( index + 3
-                        const lastParenIndex = fullStatement.lastIndexOf(')');
+                                    const methodIndent = methodLine.search(/\S/);
+                                    // 如果遇到同级或更低缩进的非空行，说明方法结束
+                                    if (methodIndent !== -1 && methodIndent <= defLine.search(/\S/) && methodLine.trim() !== '') {
+                                        break;
+                                    }
 
-                        if (firstParenIndex !== -1 && lastParenIndex !== -1 && lastParenIndex > firstParenIndex) {
-                            const argsStr = fullStatement.substring(firstParenIndex + 1, lastParenIndex);
+                                    // 匹配 return Ele(
+                                    const returnEleRegex = /^\s+return\s+Ele\s*\(/;
+                                    if (methodLine.match(returnEleRegex)) {
+                                        foundEle = true;
+                                        fullStatement = methodLine;
+                                        eleStartLineIdx = j;
 
-                            // Parse arguments using existing logic
-                            const eleVar = this.parseEleVariable(varName, argsStr, lineNumber, fullStatement);
-                            if (eleVar && eleVar.desc) {
-                                eleVariables.push(eleVar);
+                                        // 检查括号是否平衡
+                                        let openParens = (fullStatement.match(/\(/g) || []).length;
+                                        let closeParens = (fullStatement.match(/\)/g) || []).length;
+
+                                        // 如果括号不平衡，继续读取后续行
+                                        while (openParens > closeParens && j < lines.length - 1) {
+                                            j++;
+                                            const nextLine = lines[j];
+                                            fullStatement += '\n' + nextLine;
+
+                                            if (nextLine !== undefined) {
+                                                openParens += (nextLine.match(/\(/g) || []).length;
+                                                closeParens += (nextLine.match(/\)/g) || []).length;
+                                            }
+                                        }
+
+                                        // 更新主循环索引以跳过已处理的行
+                                        i = j;
+                                        break;
+                                    }
+                                }
+
+                                if (foundEle && fullStatement) {
+                                    // 提取 Ele(...) 中的参数
+                                    const firstParenIndex = fullStatement.indexOf('Ele(') + 3;
+                                    const lastParenIndex = fullStatement.lastIndexOf(')');
+
+                                    if (firstParenIndex !== -1 && lastParenIndex !== -1 && lastParenIndex > firstParenIndex) {
+                                        const argsStr = fullStatement.substring(firstParenIndex + 1, lastParenIndex);
+
+                                        // 使用现有逻辑解析参数
+                                        const eleVar = this.parseEleVariable(varName, argsStr, defLineNumber, fullStatement);
+                                        if (eleVar && eleVar.desc) {
+                                            eleVariables.push(eleVar);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -338,10 +374,6 @@ export class EleParser {
                 eleVar.hierarchy = [eleVar.desc];
             }
         }
-
-        // 解析其他参数
-        const argParts = this.splitArguments(argsStr);
-        eleVar.arguments = argParts;
 
         return eleVar.desc ? eleVar : null;
     }
@@ -514,9 +546,13 @@ export class EleParser {
             const fileResults = this.parseFile(filePath);
             eleResults.push(...fileResults);
 
-            const methodResult = this.parseMethodFile(filePath);
-            if (methodResult) {
-                methodResults.push(methodResult);
+            // 跳过以 ele.py 结尾的文件，不解析其方法
+            const fileName = path.basename(filePath).toLowerCase();
+            if (!fileName.endsWith('ele.py') && !fileName.endsWith('_ele.py')) {
+                const methodResult = this.parseMethodFile(filePath);
+                if (methodResult) {
+                    methodResults.push(methodResult);
+                }
             }
         }
 
