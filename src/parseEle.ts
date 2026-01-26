@@ -247,16 +247,49 @@ export class EleParser {
                         eleVariables = [];
                     }
 
-                    // 检查 Ele 变量定义
-                    const eleMatch = line.match(eleVarRegex);
-                    if (eleMatch && eleMatch[1] && eleMatch[2] && currentClass) {
-                        const varName = eleMatch[1];
-                        const argsStr = eleMatch[2];
+                    // Check Ele variable definition
+                    // Supports both single-line and multi-line definitions
+                    // Match "name = Ele(" start
+                    const eleStartRegex = /^\s+(\w+)\s*=\s*Ele\s*\(/;
+                    const eleStartMatch = line.match(eleStartRegex);
 
-                        // 解析参数，查找 desc
-                        const eleVar = this.parseEleVariable(varName, argsStr, lineNumber, line);
-                        if (eleVar && eleVar.desc) {
-                            eleVariables.push(eleVar);
+                    if (eleStartMatch && eleStartMatch[1] && currentClass) {
+                        const varName = eleStartMatch[1];
+                        let fullStatement = line;
+                        let currentLineIdx = i;
+
+                        // Check if parentheses are balanced
+                        let openParens = (fullStatement.match(/\(/g) || []).length;
+                        let closeParens = (fullStatement.match(/\)/g) || []).length;
+
+                        // If not balanced, read subsequent lines
+                        while (openParens > closeParens && currentLineIdx < lines.length - 1) {
+                            currentLineIdx++;
+                            const nextLine = lines[currentLineIdx];
+                            fullStatement += '\n' + nextLine;
+
+                            if (nextLine !== undefined) {
+                                openParens += (nextLine.match(/\(/g) || []).length;
+                                closeParens += (nextLine.match(/\)/g) || []).length;
+                            }
+                        }
+
+                        // Advance the main loop index to skip processed lines
+                        i = currentLineIdx;
+
+                        // Extract arguments content from "Ele(...)"
+                        // Match the first "Ele(" and the last ")"
+                        const firstParenIndex = fullStatement.indexOf('Ele(') + 3; // Index of '(', which is Ele( index + 3
+                        const lastParenIndex = fullStatement.lastIndexOf(')');
+
+                        if (firstParenIndex !== -1 && lastParenIndex !== -1 && lastParenIndex > firstParenIndex) {
+                            const argsStr = fullStatement.substring(firstParenIndex + 1, lastParenIndex);
+
+                            // Parse arguments using existing logic
+                            const eleVar = this.parseEleVariable(varName, argsStr, lineNumber, fullStatement);
+                            if (eleVar && eleVar.desc) {
+                                eleVariables.push(eleVar);
+                            }
                         }
                     }
                 }
