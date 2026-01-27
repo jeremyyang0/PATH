@@ -123,10 +123,12 @@ export function activate(context: vscode.ExtensionContext): void {
     // 初始加载数据（webview自动处理）
 
     // 自动显示辅助视图容器（静默处理，不报错）
+    /*
     vscode.commands.executeCommand('workbench.view.extension.eleSecondaryViewContainer').then(
         () => { },
         () => console.log('Secondary view container not available at startup')
     );
+    */
 
     // 插件激活时进行一次初始刷新
     setTimeout(() => {

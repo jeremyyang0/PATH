@@ -268,21 +268,27 @@ function renderTreeItem(item, level) {
     }
 
     // 展开/收起图标
+    const chevronSvg = '<svg class="icon-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06z"/></svg>';
+
     if (hasChildren) {
-        html += '<span class="expand-icon ' + (isExpanded ? 'expanded' : 'expandable') + '" onclick="toggleExpand(\'' + escapeHtml(item.fullPath) + '\')"></span>';
+        html += '<span class="expand-icon ' + (isExpanded ? 'expanded' : 'expandable') + '" onclick="toggleExpand(\'' + escapeHtml(item.fullPath) + '\')">' + chevronSvg + '</span>';
     } else {
-        html += '<span class="expand-icon leaf"></span>';
+        // Leaf method icon
+        html += '<span class="expand-icon leaf"><div class="icon-method"></div></span>';
     }
 
     // 标签
     html += '<span class="tree-label" onclick="selectItem(\'' + escapeHtml(item.fullPath) + '\')">' + escapeHtml(item.label) + '</span>';
 
-    // 操作按钮
+    // 操作按钮 (使用 SVG)
     if (isLeaf && item.methodFilePath) {
+        const jumpIcon = '<svg class="action-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M11.72 10.22L13.5 12 15 10.5l-2.78-2.78a.75.75 0 0 0-1.06 0l-2.78 2.78L9.94 12l1.78-1.78zM8.75 5.5h-5a.75.75 0 0 0 0 1.5h5a.75.75 0 0 0 0-1.5zM2.75 2.5a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H2.75zM2.75 12a.75.75 0 0 0 0 1.5h5a.75.75 0 0 0 0-1.5h-5z"/></svg>';
+        const editIcon = '<svg class="action-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M11.01 10.26A1.05 1.05 0 0 1 12.06 9c.16 0 .32.05.45.14l2.16 1.62c.1.07.16.18.16.3a.53.53 0 0 1-.22.42l-2.45 1.83a.98.98 0 0 1-.59.2c-.32 0-.62-.15-.81-.4l-2.18-2.9 2.43-1.95zM12.98 2.02l-9.35 9.45-1.57 3.51.98-3.92L12.38 1.61a.85.85 0 0 1 1.2 0l1 1a.85.85 0 0 1-.02 1.21l-1.58-1.8zM4.1 12.6l6.83-6.9L12.02 6.8 5.2 13.7l-1.1-1.1zm-.55 1.7l3.41-1.06L5.8 12.08l-2.25 2.22z"/></svg>';
+
         html += '<div class="tree-actions">';
-        html += '<button class="action-button" onclick="jumpToMethod(this)" data-filepath="' + escapeHtml(item.methodFilePath) + '" data-line="' + item.methodLine + '" title="跳转到方法">🔍</button>';
+        html += '<button class="action-button" onclick="jumpToMethod(this)" data-filepath="' + escapeHtml(item.methodFilePath) + '" data-line="' + item.methodLine + '" title="跳转到方法">' + jumpIcon + '</button>';
         if (item.codePath) {
-            html += '<button class="action-button" onclick="dragToEditor(this)" data-codepath="' + escapeHtml(item.codePath) + '" title="添加到编辑器">📝</button>';
+            html += '<button class="action-button" onclick="dragToEditor(this)" data-codepath="' + escapeHtml(item.codePath) + '" title="拖拽插入">' + editIcon + '</button>';
         }
         html += '</div>';
     }

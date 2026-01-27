@@ -267,21 +267,27 @@ function renderTreeItem(item, level) {
     }
 
     // 展开/收起图标
+    // 使用SVG Chevron替代 Unicode
+    const chevronSvg = '<svg class="icon-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06z"/></svg>';
+
     if (hasChildren) {
-        html += '<span class="expand-icon ' + (isExpanded ? 'expanded' : 'expandable') + '" onclick="toggleExpand(\'' + escapeHtml(item.fullPath) + '\')"></span>';
+        html += '<span class="expand-icon ' + (isExpanded ? 'expanded' : 'expandable') + '" onclick="toggleExpand(\'' + escapeHtml(item.fullPath) + '\')">' + chevronSvg + '</span>';
     } else {
-        html += '<span class="expand-icon leaf"></span>';
+        html += '<span class="expand-icon leaf"><div class="icon-dot"></div></span>';
     }
 
     // 标签
     html += '<span class="tree-label" onclick="selectItem(\'' + escapeHtml(item.fullPath) + '\')">' + escapeHtml(item.label) + '</span>';
 
-    // 操作按钮
+    // 操作按钮 (使用 SVG)
     if (isLeaf && item.eleFilePath) {
+        const fileIcon = '<svg class="action-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M13.85 4.44l-3.28-3.3a.87.87 0 0 0-.6-.25H2.5a.5.5 0 0 0-.5.5v13.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V5.03a.85.85 0 0 0-.25-.6zM10.5 2L13 4.5H10.5V2zM3 14V2h6.5v3h3v9H3z"/></svg>';
+        const editIcon = '<svg class="action-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M11.01 10.26A1.05 1.05 0 0 1 12.06 9c.16 0 .32.05.45.14l2.16 1.62c.1.07.16.18.16.3a.53.53 0 0 1-.22.42l-2.45 1.83a.98.98 0 0 1-.59.2c-.32 0-.62-.15-.81-.4l-2.18-2.9 2.43-1.95zM12.98 2.02l-9.35 9.45-1.57 3.51.98-3.92L12.38 1.61a.85.85 0 0 1 1.2 0l1 1a.85.85 0 0 1-.02 1.21l-1.58-1.8zM4.1 12.6l6.83-6.9L12.02 6.8 5.2 13.7l-1.1-1.1zm-.55 1.7l3.41-1.06L5.8 12.08l-2.25 2.22z"/></svg>';
+
         html += '<div class="tree-actions">';
-        html += '<button class="action-button" onclick="openFile(this)" data-filepath="' + escapeHtml(item.eleFilePath) + '" data-line="' + item.eleLineNumber + '" title="打开文件">📄</button>';
+        html += '<button class="action-button" onclick="openFile(this)" data-filepath="' + escapeHtml(item.eleFilePath) + '" data-line="' + item.eleLineNumber + '" title="打开文件">' + fileIcon + '</button>';
         if (item.codePath) {
-            html += '<button class="action-button" onclick="dragToEditor(this)" data-codepath="' + escapeHtml(item.codePath) + '" title="添加到编辑器">📝</button>';
+            html += '<button class="action-button" onclick="dragToEditor(this)" data-codepath="' + escapeHtml(item.codePath) + '" title="拖拽插入">' + editIcon + '</button>';
         }
         html += '</div>';
     }
