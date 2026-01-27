@@ -116,6 +116,7 @@ function restoreState() {
         const state = vscode.getState();
         if (state) {
             console.log('State restored:', state);
+
             // 恢复展开状态
             if (state.expandedItems) {
                 expandedItems = new Set(state.expandedItems);
@@ -192,24 +193,52 @@ function refreshData() {
     showLoading();
 }
 
-// 展开全部
-function expandAll() {
-    if (vscode) {
-        vscode.postMessage({
-            command: 'expandAll'
-        });
+// 展开/收起全部
+let isAllExpanded = false;
+
+function toggleExpandCollapseAll() {
+    isAllExpanded = !isAllExpanded;
+    updateToggleBtnState();
+
+    if (isAllExpanded) {
+        // Expand All
+        // Note: filteredData contains the current visible tree items
+        function addAllPaths(items) {
+            for (const item of items) {
+                if (item.children && item.children.length > 0) {
+                    expandedItems.add(item.fullPath);
+                    addAllPaths(item.children);
+                }
+            }
+        }
+        addAllPaths(filteredData);
+        if (vscode) {
+            vscode.postMessage({ command: 'expandAll' });
+        }
+    } else {
+        // Collapse All
+        expandedItems.clear();
+        if (vscode) {
+            vscode.postMessage({ command: 'collapseAll' });
+        }
     }
+
+    saveState();
+    renderTree();
 }
 
-// 收起全部
-function collapseAll() {
-    expandedItems.clear();
-    saveState(); // 保存状态
-    renderTree();
-    if (vscode) {
-        vscode.postMessage({
-            command: 'collapseAll'
-        });
+function updateToggleBtnState() {
+    const textSpan = document.getElementById('toggleExpandText');
+    const verticalBar = document.getElementById('toggleExpandVerticalBar');
+    const title = isAllExpanded ? '收起全部' : '展开全部';
+    const text = isAllExpanded ? '收起' : '展开';
+
+    if (textSpan) textSpan.innerText = text;
+    document.getElementById('toggleExpandBtn').title = title;
+
+    // Toggle the vertical bar in the icon (plus -> minus)
+    if (verticalBar) {
+        verticalBar.style.display = isAllExpanded ? 'none' : 'block';
     }
 }
 
@@ -524,8 +553,18 @@ window.addEventListener('message', event => {
     switch (message.command) {
         case 'updateData':
             updateTreeData(message.data);
-            // 数据更新后恢复状态
-            restoreState();
+
+            if (message.resetState) {
+                console.log('Reset state requested by extension');
+                expandedItems.clear();
+                if (vscode) {
+                    vscode.setState(undefined);
+                }
+                renderTree();
+            } else {
+                // 数据更新后恢复状态
+                restoreState();
+            }
             break;
         case 'expandAll':
             // 展开所有项
@@ -539,6 +578,8 @@ window.addEventListener('message', event => {
                 }
             }
             addAllPaths(filteredData);
+            isAllExpanded = true;
+            updateToggleBtnState();
             saveState(); // 保存状态
             renderTree();
             break;

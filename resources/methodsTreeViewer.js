@@ -117,6 +117,7 @@ function restoreState() {
         const state = vscode.getState();
         if (state) {
             console.log('Methods tree state restored:', state);
+
             // 恢复展开状态
             if (state.expandedItems) {
                 expandedItems = new Set(state.expandedItems);
@@ -193,24 +194,51 @@ function refreshData() {
     showLoading();
 }
 
-// 展开全部
-function expandAll() {
-    if (vscode) {
-        vscode.postMessage({
-            command: 'expandAll'
-        });
-    }
-}
+// 展开/收起全部
+let isAllExpanded = false;
 
-// 收起全部
-function collapseAll() {
-    expandedItems.clear();
+function toggleExpandCollapseAll() {
+    isAllExpanded = !isAllExpanded;
+    updateToggleBtnState();
+
+    if (isAllExpanded) {
+        // Expand All
+        function addAllPaths(items) {
+            for (const item of items) {
+                if (item.children && item.children.length > 0) {
+                    expandedItems.add(item.fullPath);
+                    addAllPaths(item.children);
+                }
+            }
+        }
+        addAllPaths(filteredData);
+        if (vscode) {
+            vscode.postMessage({ command: 'expandAll' });
+        }
+    } else {
+        // Collapse All
+        expandedItems.clear();
+        if (vscode) {
+            vscode.postMessage({ command: 'collapseAll' });
+        }
+    }
+
     saveState(); // 保存状态
     renderTree();
-    if (vscode) {
-        vscode.postMessage({
-            command: 'collapseAll'
-        });
+}
+
+function updateToggleBtnState() {
+    const textSpan = document.getElementById('toggleExpandText');
+    const verticalBar = document.getElementById('toggleExpandVerticalBar');
+    const title = isAllExpanded ? '收起全部' : '展开全部';
+    const text = isAllExpanded ? '收起' : '展开';
+
+    if (textSpan) textSpan.innerText = text;
+    document.getElementById('toggleExpandBtn').title = title;
+
+    // Toggle the vertical bar in the icon (plus -> minus)
+    if (verticalBar) {
+        verticalBar.style.display = isAllExpanded ? 'none' : 'block';
     }
 }
 
@@ -278,7 +306,7 @@ function renderTreeItem(item, level) {
     }
 
     // 标签
-    html += '<span class="tree-label" onclick="selectItem(\'' + escapeHtml(item.fullPath) + '\')">' + escapeHtml(item.label) + '</span>';
+    html += '<span class="tree-label" onclick="handleItemClick(event, \'' + escapeHtml(item.fullPath) + '\')">' + escapeHtml(item.label) + '</span>';
 
     // 操作按钮 (使用 SVG)
     if (isLeaf && item.methodFilePath) {
@@ -314,6 +342,33 @@ function toggleExpand(path) {
     }
     saveState(); // 保存状态
     renderTree();
+}
+
+// 处理项目点击（包括Shift+Click）
+function handleItemClick(event, path) {
+    // 找到对应的DOM元素
+    const element = document.querySelector('[data-path="' + escapeHtml(path) + '"]');
+    if (!element) return;
+
+    // 检查是否是叶子节点且按下了Shift键
+    if (element.classList.contains('leaf') && event.shiftKey) {
+        // 如果是叶子节点且按下了Shift，执行拖拽逻辑（直接插入到编辑器）
+        const codePath = element.getAttribute('data-codepath');
+        if (codePath && vscode) {
+            // 移除括号，因为insertTextAtCursor会自动添加（保持与拖拽一致的逻辑）
+            const cleanCodePath = codePath.replace(/\(\)$/, '');
+
+            // 发送消息到扩展
+            vscode.postMessage({
+                command: 'dragToEditor',
+                codePath: cleanCodePath
+            });
+            console.log('Shift+Click插入:', cleanCodePath);
+        }
+    } else {
+        // 否则执行普通的选择逻辑
+        selectItem(path);
+    }
 }
 
 // 选择项目
@@ -387,8 +442,18 @@ window.addEventListener('message', event => {
     switch (message.command) {
         case 'updateData':
             updateTreeData(message.data);
-            // 数据更新后恢复状态
-            restoreState();
+
+            if (message.resetState) {
+                console.log('Reset state requested by extension');
+                expandedItems.clear();
+                if (vscode) {
+                    vscode.setState(undefined);
+                }
+                renderTree();
+            } else {
+                // 数据更新后恢复状态
+                restoreState();
+            }
             break;
         case 'expandAll':
             // 展开所有项
@@ -402,6 +467,8 @@ window.addEventListener('message', event => {
                 }
             }
             addAllPaths(filteredData);
+            isAllExpanded = true;
+            updateToggleBtnState();
             saveState(); // 保存状态
             renderTree();
             break;

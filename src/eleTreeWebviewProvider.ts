@@ -82,6 +82,8 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
         });
     }
 
+    private _isFirstLaunch = true;
+
     private _getHtmlForWebview(webview: vscode.Webview): string {
         try {
             const htmlPath = path.join(this._extensionUri.fsPath, 'resources', 'eleTreeViewer.html');
@@ -120,7 +122,12 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
         try {
             await this._dataProvider.loadData();
             const data = await this._getTreeData();
-            this._postMessage({ command: 'updateData', data });
+            this._postMessage({
+                command: 'updateData',
+                data,
+                resetState: this._isFirstLaunch
+            });
+            this._isFirstLaunch = false;
         } catch (error) {
             console.error('Failed to load data:', error);
         }

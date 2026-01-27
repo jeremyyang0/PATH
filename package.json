@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python自动化测试助手 - 智能解析Ele变量和方法，提供树形结构浏览和自动化测试代码生成",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -22,12 +22,12 @@
       "activitybar": [
         {
           "id": "eleTreeViewerContainer",
-          "title": "PATH - 测试元素树",
+          "title": "PATH",
           "icon": "resources/icons/ele-tree.svg"
         },
         {
           "id": "eleSecondaryViewContainer",
-          "title": "PATH - 测试辅助视图",
+          "title": "PATH",
           "icon": "resources/icons/secondary-view.svg"
         }
       ]

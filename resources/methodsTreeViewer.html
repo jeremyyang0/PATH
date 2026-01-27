@@ -363,29 +363,20 @@
         <div class="toolbar">
             <button class="btn" onclick="refreshData()" title="刷新数据">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
                     <path
-                        d="M13.65 2.35A7.958 7.958 0 0 0 8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0a7.93 7.93 0 0 0-5.65 2.35l1.42 1.42A5.95 5.95 0 0 1 8 2a6 6 0 1 1-6 6H0a8 8 0 1 0 13.65-5.65z"
-                        fill-rule="evenodd" />
-                    <path d="M4.17 3.24H0V7.4l4.17-4.16z" />
+                        d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
                 </svg>
                 <span>刷新</span>
             </button>
-            <button class="btn" onclick="expandAll()" title="展开全部">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M9 9H4v1h5V9zM9 7H4v1h5V7zM9 5H4v1h5V5z" />
+            <button class="btn" id="toggleExpandBtn" onclick="toggleExpandCollapseAll()" title="展开/收起全部">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" id="toggleExpandIcon">
                     <path fill-rule="evenodd"
                         d="M14 1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 14V2h12v12H2z" />
+                    <path d="M4 8h8v1H4z" />
+                    <path id="toggleExpandVerticalBar" d="M8 4v8h1V4z" />
                 </svg>
-                <span>展开</span>
-            </button>
-            <button class="btn" onclick="collapseAll()" title="收起全部">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M9 9H4v1h5V9zM9 7H4v1h5V7zM9 5H4v1h5V5z" />
-                    <path fill-rule="evenodd"
-                        d="M14 1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 14V2h12v12H2z" />
-                    <path d="M4 4h8v8H4z" fill="var(--vscode-editor-background)" opacity="0.5" />
-                </svg>
-                <span>收起</span>
+                <span id="toggleExpandText">展开</span>
             </button>
         </div>
     </div>
