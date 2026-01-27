@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python自动化测试助手 - 智能解析Ele变量和方法，提供树形结构浏览和自动化测试代码生成",
-  "version": "1.2.7",
+  "version": "1.2.9",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -134,6 +134,10 @@
       {
         "command": "eleTreeViewer.createCase",
         "title": "Create Case (创建用例)"
+      },
+      {
+        "command": "eleTreeViewer.debugMarkrunner",
+        "title": "Debug Markrunner"
       }
     ],
     "menus": {
@@ -153,6 +157,13 @@
         {
           "command": "eleTreeViewer.createCase",
           "group": "2_workspace"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "eleTreeViewer.debugMarkrunner",
+          "group": "navigation",
+          "when": "resourceLangId == python && resourceFilename =~ /^test_.+\\.py$/"
         }
       ]
     },

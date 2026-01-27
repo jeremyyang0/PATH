@@ -5,6 +5,7 @@ import { TreeItem } from './treeItem';
 import { SecondaryViewProvider } from './secondaryViewProvider';
 import { EleTreeWebviewProvider } from './eleTreeWebviewProvider';
 import { MethodsTreeWebviewProvider } from './methodsTreeWebviewProvider';
+import { checkAndAddLaunchConfig } from './launchConfig';
 
 export function activate(context: vscode.ExtensionContext): void {
     const secondaryProvider = new SecondaryViewProvider(context.extensionUri);
@@ -121,6 +122,33 @@ export function activate(context: vscode.ExtensionContext): void {
         fileWatcher
     );
     // 初始加载数据（webview自动处理）
+    try {
+        checkAndAddLaunchConfig();
+    } catch (e) {
+        console.error('Error initializing launch configuration:', e);
+    }
+
+    // 注册Debug Markrunner命令
+    const debugMarkrunnerCommand = vscode.commands.registerCommand('eleTreeViewer.debugMarkrunner', async (uri: vscode.Uri) => {
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('Requires a workspace to debug.');
+            return;
+        }
+
+        const relativeFile = vscode.workspace.asRelativePath(uri);
+
+        vscode.debug.startDebugging(workspaceFolder, {
+            name: "Debug Markrunner File",
+            type: "debugpy",
+            request: "launch",
+            module: "markrunner.cli",
+            args: ["run", "-w", "${workspaceFolder}", "-p", relativeFile, "--no-report", "--reruns", "0"],
+            console: "integratedTerminal"
+        });
+    });
+
+    context.subscriptions.push(debugMarkrunnerCommand);
 
     // 自动显示辅助视图容器（静默处理，不报错）
     /*
