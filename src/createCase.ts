@@ -32,14 +32,13 @@ export async function createCase(uri: vscode.Uri): Promise<void> {
 
     // 弹出输入框，要求输入禅道ID
     const zentaoId = await vscode.window.showInputBox({
-        prompt: '请输入禅道ID',
-        placeHolder: '例如: 12345',
+        prompt: '请输入禅道ID (可选，回车跳过)',
+        placeHolder: '例如: 12345 (留空则创建基础模板)',
         validateInput: (value: string) => {
-            if (!value || value.trim() === '') {
-                return '禅道ID不能为空';
-            }
-            if (!/^\d+$/.test(value.trim())) {
-                return '禅道ID必须为数字';
+            if (value && value.trim() !== '') {
+                if (!/^\d+$/.test(value.trim())) {
+                    return '禅道ID必须为数字';
+                }
             }
             return null;
         }
@@ -50,20 +49,46 @@ export async function createCase(uri: vscode.Uri): Promise<void> {
         return;
     }
 
-    // 弹出输入框，要求输入应用名称
-    const appName = await vscode.window.showInputBox({
-        prompt: '请输入应用名称',
-        placeHolder: '例如: Logic, Layout, Router',
-        validateInput: (value: string) => {
-            if (!value || value.trim() === '') {
-                return '应用名称不能为空';
+    // 获取配置中的应用名称
+    const config = vscode.workspace.getConfiguration('path');
+    let appName = config.get<string>('appName');
+
+    // 如果配置中没有应用名称，或者为空，则弹出输入框
+    if (!appName || appName.trim() === '') {
+        appName = await vscode.window.showInputBox({
+            prompt: '请输入应用名称',
+            placeHolder: '例如: Logic, Layout, Router',
+            validateInput: (value: string) => {
+                if (!value || value.trim() === '') {
+                    return '应用名称不能为空';
+                }
+                if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value.trim())) {
+                    return '应用名称必须为英文（字母、数字、下划线，且不能以数字开头）';
+                }
+                return null;
             }
-            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value.trim())) {
-                return '应用名称必须为英文（字母、数字、下划线，且不能以数字开头）';
-            }
-            return null;
+        });
+    } else {
+        // 验证配置中的应用名称是否合法
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(appName.trim())) {
+            vscode.window.showErrorMessage(`配置中的应用名称 "${appName}" 不合法 (必须为英文：字母、数字、下划线，且不能以数字开头)，请检查设置`);
+            // 如果不合法，还是弹出输入框让用户输入
+            appName = await vscode.window.showInputBox({
+                prompt: '请输入应用名称',
+                placeHolder: '例如: Logic, Layout, Router',
+                validateInput: (value: string) => {
+                    if (!value || value.trim() === '') {
+                        return '应用名称不能为空';
+                    }
+                    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value.trim())) {
+                        return '应用名称必须为英文（字母、数字、下划线，且不能以数字开头）';
+                    }
+                    return null;
+                }
+            });
         }
-    });
+    }
+
 
     // 用户取消输入
     if (appName === undefined) {
@@ -73,12 +98,14 @@ export async function createCase(uri: vscode.Uri): Promise<void> {
     const trimmedId = zentaoId.trim();
     const trimmedAppName = appName.trim();
 
-    // 尝试从禅道获取用例信息
+    // 尝试从禅道获取用例信息（仅当有ID时）
     let caseInfo: ZentaoCaseInfo | null = null;
-    try {
-        caseInfo = await getCaseInfo(trimmedId);
-    } catch (error) {
-        console.log('获取禅道用例信息失败:', error);
+    if (trimmedId) {
+        try {
+            caseInfo = await getCaseInfo(trimmedId);
+        } catch (error) {
+            console.log('获取禅道用例信息失败:', error);
+        }
     }
 
     // 获取文件夹名称
@@ -115,7 +142,7 @@ export async function createCase(uri: vscode.Uri): Promise<void> {
     }
 
     // 构建用例标题和前置条件
-    const caseTitle = caseInfo?.title || `测试用例 #${trimmedId}`;
+    const caseTitle = caseInfo?.title || (trimmedId ? `测试用例 #${trimmedId}` : '测试用例');
     const precondition = caseInfo?.precondition || '';
 
     // 构建前置条件注释
@@ -136,11 +163,15 @@ export async function createCase(uri: vscode.Uri): Promise<void> {
     }
 
     // 创建测试用例文件内容
-    const fileContent = `# -*- coding: utf-8 -*-
+    let fileContent = '';
+
+    if (trimmedId) {
+        // 完整模板（有禅道ID）
+        fileContent = `# -*- coding: utf-8 -*-
 """
 测试用例文件: ${testName}.py
 禅道ID: ${trimmedId}
-用例标题: ${caseTitle}${preconditionComment}
+用例标题: ${caseTitle}
 """
 from method.${trimmedAppName.toLowerCase()} import ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export
 from case.base_case import BaseCase
@@ -151,6 +182,22 @@ class Test${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}(Ba
         """${caseTitle}"""
 ${stepsComment}
 `;
+    } else {
+        // 最小模板（无禅道ID）
+        fileContent = `# -*- coding: utf-8 -*-
+"""
+测试用例文件: ${testName}.py
+"""
+from method.${trimmedAppName.toLowerCase()} import ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export
+from case.base_case import BaseCase
+
+class Test${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}(BaseCase):
+
+    def ${testName}(self, ${trimmedAppName.toLowerCase()}: ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export):
+        """${caseTitle}"""
+${stepsComment}
+`;
+    }
 
     try {
         // 写入文件
