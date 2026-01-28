@@ -75,7 +75,7 @@ export class EleParser {
     private extractPackageName(initFilePath: string): string | null {
         try {
             const content = fs.readFileSync(initFilePath, 'utf-8');
-            const lines = content.split('\n');
+            const lines = content.split(/\r?\n/);
 
             // 正则匹配类定义
             const classDefRegex = /^class\s+(\w+)(?:\s*\([^)]*\))?\s*:/;
@@ -186,7 +186,7 @@ export class EleParser {
     private parseFile(filePath: string): FileResult[] {
         try {
             const content = fs.readFileSync(filePath, 'utf-8');
-            const lines = content.split('\n');
+            const lines = content.split(/\r?\n/);
             const results: FileResult[] = [];
 
             // 正则匹配以 Ele 结尾的类定义
@@ -431,7 +431,7 @@ export class EleParser {
     private parseMethodFile(filePath: string): MethodResult | null {
         try {
             const content = fs.readFileSync(filePath, 'utf-8');
-            const lines = content.split('\n');
+            const lines = content.split(/\r?\n/);
             const methods: MethodInfo[] = [];
 
             // 正则匹配方法定义（不以 _ 开头）
@@ -461,22 +461,30 @@ export class EleParser {
                             doc = docMatch[1].trim() || methodName;
                         } else {
                             // 检查多行文档字符串
-                            const docStartMatch = nextLine.match(/^\s*['\"]{3}(.*)$/);
+                            const docStartMatch = nextLine.match(/^\s*(['\"]{3})(.*)$/);
                             if (docStartMatch) {
-                                let docContent = docStartMatch[1] || '';
-                                for (let j = i + 2; j < lines.length; j++) {
-                                    const docLine = lines[j];
-                                    if (docLine === undefined) break;
+                                const delimiter = docStartMatch[1] || '';
+                                let docContent = docStartMatch[2] || '';
 
-                                    const docEndMatch = docLine.match(/^(.*)['\"]{3}/);
-                                    if (docEndMatch) {
-                                        docContent += ' ' + (docEndMatch[1] || '');
-                                        break;
-                                    } else {
-                                        docContent += ' ' + docLine.trim();
+                                // Check if it ends with the same delimiter on the same line
+                                if (delimiter && docContent.endsWith(delimiter)) {
+                                    doc = docContent.slice(0, -delimiter.length).trim() || methodName;
+                                } else {
+                                    for (let j = i + 2; j < lines.length; j++) {
+                                        const docLine = lines[j];
+                                        if (docLine === undefined) break;
+
+                                        const docEndMatch = docLine.match(/^(.*)['\"]{3}/);
+                                        if (docEndMatch) {
+                                            docContent += '\n' + (docEndMatch[1] || '');
+                                            break;
+                                        } else {
+                                            docContent += '\n' + docLine;
+                                        }
                                     }
+                                    // 获取整个注释内容，先strip再取第一行
+                                    doc = docContent.trim().split('\n')[0]?.trim() || methodName;
                                 }
-                                doc = docContent.trim() || methodName;
                             }
                         }
                     }

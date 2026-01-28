@@ -138,14 +138,34 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const relativeFile = vscode.workspace.asRelativePath(uri);
 
-        vscode.debug.startDebugging(workspaceFolder, {
-            name: "Debug Markrunner File",
-            type: "debugpy",
-            request: "launch",
-            module: "markrunner.cli",
-            args: ["run", "-w", "${workspaceFolder}", "-p", relativeFile, "--no-report", "--reruns", "0"],
-            console: "integratedTerminal"
-        });
+        // 获取配置的Launch Config名称
+        const config = vscode.workspace.getConfiguration('path.markrunner');
+        const contextLaunchConfigName = config.get<string>('contextLaunchConfigName') || 'MarkRunner Context Debug';
+
+        // 检查launch.json中是否存在该配置
+        const launchConfig = vscode.workspace.getConfiguration('launch', workspaceFolder.uri);
+        const configurations = launchConfig.get<any[]>('configurations') || [];
+        const templateExists = configurations.some(c => c.name === contextLaunchConfigName);
+
+        if (templateExists) {
+            console.log(`Using custom launch configuration: ${contextLaunchConfigName}`);
+            // 使用自定义配置名称启动调试，VS Code会自动替换变量
+            // 注意：这里我们不能简单地传递相对路径给launch config，因为launch config是静态的
+            // 但是通常自定义launch config会使用 ${file} 或 ${relativeFile}
+            // 如果用户想要针对当前右键的文件运行，他们的launch config应该包含 ${file} 或类似变量
+            // 我们只需要通过name启动即可
+            vscode.debug.startDebugging(workspaceFolder, contextLaunchConfigName);
+        } else {
+            console.log('Using default internal launch configuration');
+            vscode.debug.startDebugging(workspaceFolder, {
+                name: "Debug Markrunner File",
+                type: "debugpy",
+                request: "launch",
+                module: "markrunner.cli",
+                args: ["run", "-w", "${workspaceFolder}", "-p", relativeFile, "--no-report", "--reruns", "0"],
+                console: "integratedTerminal"
+            });
+        }
     });
 
     context.subscriptions.push(debugMarkrunnerCommand);

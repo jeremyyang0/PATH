@@ -564,9 +564,28 @@ window.addEventListener('message', event => {
             } else {
                 // 数据更新后恢复状态
                 restoreState();
+
+                // 如果当前正在搜索，则默认展开所有匹配项
+                if (currentSearchKeyword) {
+                    // 使用局部函数通过递归收集所有路径
+                    const collectPaths = (items) => {
+                        for (const item of items) {
+                            expandedItems.add(item.fullPath);
+                            if (item.children && item.children.length > 0) {
+                                collectPaths(item.children);
+                            }
+                        }
+                    };
+                    collectPaths(treeData); // 注意：updateTreeData已将filteredData设置为treeData (message.data)
+                    saveState(); // 保存新的展开状态
+                    renderTree(); // 重新渲染以应用展开状态
+                }
             }
             break;
-        case 'expandAll':
+        case 'restoreState':
+            // 响应恢复状态的请求
+            restoreState();
+            break;
             // 展开所有项
             expandedItems.clear();
             function addAllPaths(items) {
