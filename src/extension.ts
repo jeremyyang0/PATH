@@ -6,6 +6,9 @@ import { SecondaryViewProvider } from './secondaryViewProvider';
 import { EleTreeWebviewProvider } from './eleTreeWebviewProvider';
 import { MethodsTreeWebviewProvider } from './methodsTreeWebviewProvider';
 import { checkAndAddLaunchConfig } from './launchConfig';
+import { processFileWithAI } from './aiService';
+import { checkAndSyncZentao } from './zentaoSync';
+import * as path from 'path';
 
 export function activate(context: vscode.ExtensionContext): void {
     const secondaryProvider = new SecondaryViewProvider(context.extensionUri);
@@ -104,6 +107,32 @@ export function activate(context: vscode.ExtensionContext): void {
         methodsTreeWebviewProvider.refresh();
     });
 
+    // 监听文件保存，检查是否需要同步禅道
+    const saveListener = vscode.workspace.onDidSaveTextDocument(async (document) => {
+        // 只处理py文件
+        if (document.languageId !== 'python' && !document.fileName.endsWith('.py')) {
+            return;
+        }
+
+        // 检查文件名是否以 test_ 开头
+        const fileName = path.basename(document.fileName);
+        if (!fileName.startsWith('test_')) {
+            return;
+        }
+
+        // 检查内容中是否有禅道ID
+        const text = document.getText();
+        const idMatch = text.match(/禅道ID[:：]\s*(\d+)/);
+        if (!idMatch) {
+            return;
+        }
+        const zentaoId = idMatch[1];
+
+        if (zentaoId) {
+            await checkAndSyncZentao(document, zentaoId);
+        }
+    });
+
     // 添加到订阅列表
     context.subscriptions.push(
         refreshCommand,
@@ -119,8 +148,21 @@ export function activate(context: vscode.ExtensionContext): void {
         focusSecondaryViewCommand,
         createCaseCommand,
         statusBarItem,
-        fileWatcher
+        statusBarItem,
+        fileWatcher,
+        saveListener
     );
+
+    // 注册 AI Generation 命令
+    const aiGenerationCommand = vscode.commands.registerCommand('eleTreeViewer.aiGeneration', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showWarningMessage('请先打开一个测试文件');
+            return;
+        }
+        await processFileWithAI(editor.document);
+    });
+    context.subscriptions.push(aiGenerationCommand);
     // 初始加载数据（webview自动处理）
     try {
         checkAndAddLaunchConfig();

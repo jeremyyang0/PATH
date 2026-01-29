@@ -155,6 +155,43 @@ export async function getCaseInfo(caseId: string): Promise<ZentaoCaseInfo | null
 }
 
 /**
+ * 更新用例步骤
+ */
+export async function updateCase(caseId: string, steps: Array<{ desc: string; expect: string }>): Promise<boolean> {
+    const config = getZentaoConfig();
+
+    if (!config.host || !config.username || !config.password) {
+        return false;
+    }
+
+    try {
+        const token = await getToken(config.host, config.username, config.password);
+        const url = `http://${config.host}/max/api.php/v1/testcases/${caseId}`;
+
+        // 构建请求数据
+        const data = JSON.stringify({
+            steps: steps.map((step) => ({
+                desc: step.desc,
+                expect: step.expect,
+            }))
+        });
+
+        const response = await sendRequest(url, 'PUT', { 'Token': token }, data);
+        const result = JSON.parse(response);
+
+        if (result.id) {
+            return true;
+        }
+
+        vscode.window.showErrorMessage(`更新用例失败: ${JSON.stringify(result)}`);
+        return false;
+    } catch (error) {
+        vscode.window.showErrorMessage(`更新用例异常: ${error}`);
+        return false;
+    }
+}
+
+/**
  * 测试禅道连接
  */
 export async function testConnection(): Promise<boolean> {
