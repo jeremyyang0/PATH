@@ -47,6 +47,14 @@ function getAIConfig(): AIConfig {
 }
 
 /**
+ * 获取是否记录对话过程的配置
+ */
+function getLogConversation(): boolean {
+    const config = vscode.workspace.getConfiguration('path.ai');
+    return config.get<boolean>('logConversation') || false;
+}
+
+/**
  * 发送HTTP请求
  */
 function sendRequest(url: string, method: string, headers: Record<string, string>, data?: string): Promise<string> {
@@ -371,10 +379,11 @@ async function searchAndMatchMethod(
     allCandidates: MethodCandidate[],
     candidateType: 'action' | 'assert' | 'all',
     previousSteps: string[] = []
-): Promise<{ calls: MethodCallResult[], history: string[] }> {
+): Promise<{ calls: MethodCallResult[], history: string[], conversationLogs: ConversationLog[] }> {
     const MAX_TURNS = 3;
     let searchHistory: string[] = [];
     let currentCandidates: MethodCandidate[] = [];
+    let conversationLogs: ConversationLog[] = [];
 
     // 根据类型预过滤搜索范围
     let searchScopeCandidates = allCandidates;
@@ -468,12 +477,18 @@ ${candidateType === 'assert' ? '请找到能验证该预期的断言方法。' :
             const responseText = await callAI(prompt);
             console.log(`Turn ${turn + 1} AI Response:`, responseText);
 
+            // 记录对话
+            conversationLogs.push({
+                prompt: prompt,
+                response: responseText
+            });
+
             const result = extractJson(responseText);
             if (!result) {
                 console.error('无法解析AI响应JSON');
                 // 后备搜索逻辑
                 if (turn === 0) {
-                    const keywords = queryText.split(/[\s,>，>]+/).filter(k => k.length > 1).slice(0, 3);
+                    const keywords = queryText.split(/[\s,>，＞]+/).filter(k => k.length > 1).slice(0, 3);
                     searchHistory.push(`自动提取关键词: ${keywords.join(', ')}`);
                     const searchResult = searchMethodTree(searchScopeCandidates, keywords);
                     const newCandidates = searchResult.filter(
@@ -518,26 +533,69 @@ ${candidateType === 'assert' ? '请找到能验证该预期的断言方法。' :
                     });
                 }
 
-                return { calls: calls, history: searchHistory };
+                return { calls: calls, history: searchHistory, conversationLogs: conversationLogs };
             }
         } catch (error) {
             console.error('AI交互出错:', error);
             searchHistory.push(`AI Error: ${error}`);
         }
     }
-    return { calls: [], history: searchHistory };
+    return { calls: [], history: searchHistory, conversationLogs: conversationLogs };
+}
+
+/**
+ * 对话记录
+ */
+interface ConversationLog {
+    prompt: string;
+    response: string;
 }
 
 interface ReportItem {
     step: string;
     result: 'Skipped' | 'Success' | 'Failed';
     details: string;
+    conversationLogs?: ConversationLog[];
 }
 
-function generateHtmlReport(items: ReportItem[]): string {
+/**
+ * HTML转义工具函数
+ */
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function generateHtmlReport(items: ReportItem[], showConversation: boolean = false): string {
     const successCount = items.filter(i => i.result === 'Success').length;
     const failedCount = items.filter(i => i.result === 'Failed').length;
     const skippedCount = items.filter(i => i.result === 'Skipped').length;
+
+    // 生成对话记录HTML
+    const formatConversationLogs = (logs?: ConversationLog[]): string => {
+        if (!showConversation || !logs || logs.length === 0) {
+            return '';
+        }
+        const logsHtml = logs.map((log, idx) => `
+            <div class="conversation-item">
+                <div class="conversation-turn">对话轮 ${idx + 1}</div>
+                <div class="conversation-label">Prompt:</div>
+                <pre class="conversation-content">${escapeHtml(log.prompt)}</pre>
+                <div class="conversation-label">Response:</div>
+                <pre class="conversation-content">${escapeHtml(log.response)}</pre>
+            </div>
+        `).join('');
+        return `
+            <details class="conversation-details">
+                <summary>查看对话过程 (${logs.length} 轮)</summary>
+                ${logsHtml}
+            </details>
+        `;
+    };
 
     // 生成行
     const rows = items.map(item => {
@@ -546,11 +604,13 @@ function generateHtmlReport(items: ReportItem[]): string {
         else if (item.result === 'Failed') badgeClass = 'failed';
         else badgeClass = 'skipped';
 
+        const conversationHtml = formatConversationLogs(item.conversationLogs);
+
         return `
             <tr>
                 <td style="font-weight: 500;">${item.step}</td>
                 <td><span class="status-badge ${badgeClass}">${item.result}</span></td>
-                <td><pre>${item.details}</pre></td>
+                <td><pre>${item.details}</pre>${conversationHtml}</td>
             </tr>
         `;
     }).join('');
@@ -648,6 +708,56 @@ function generateHtmlReport(items: ReportItem[]): string {
         .status-badge.success { background: rgba(52, 199, 89, 0.15); color: var(--success-color); }
         .status-badge.failed { background: rgba(255, 59, 48, 0.15); color: var(--error-color); }
         .status-badge.skipped { background: rgba(142, 142, 147, 0.15); color: var(--skip-color); }
+
+        /* 对话记录样式 */
+        .conversation-details {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg-color);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        .conversation-details summary {
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--text-secondary);
+            padding: 4px 0;
+        }
+        .conversation-details summary:hover {
+            color: var(--text-primary);
+        }
+        .conversation-item {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--card-bg);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+        .conversation-turn {
+            font-weight: 600;
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+        .conversation-label {
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--text-primary);
+            margin: 8px 0 4px 0;
+        }
+        .conversation-content {
+            font-size: 11px;
+            line-height: 1.5;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 8px;
+            background: var(--bg-color);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
     </style>
 </head>
 <body>
@@ -734,6 +844,7 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
     const report: ReportItem[] = [];
     const stepsHistory: string[] = [];
     let lineOffset = 0;
+    const logConversation = getLogConversation();
 
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
@@ -784,7 +895,7 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
 
             // 2. 处理断言 (Assert)
             let assertCalls: MethodCallResult[] = [];
-            let assertResult = { calls: [], history: [] } as { calls: MethodCallResult[], history: string[] };
+            let assertResult = { calls: [], history: [], conversationLogs: [] } as { calls: MethodCallResult[], history: string[], conversationLogs: ConversationLog[] };
 
             if (step.expect) {
                 assertResult = await searchAndMatchMethod(step.expect, allCandidates, 'assert', stepsHistory);
@@ -819,7 +930,8 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
                 report.push({
                     step: step.desc,
                     result: 'Success',
-                    details: `生成操作代码:\n${callDescriptions}`
+                    details: `生成操作代码:\n${callDescriptions}`,
+                    conversationLogs: logConversation ? actionResult.conversationLogs : undefined
                 });
                 stepsHistory.push(`${step.desc} (Code: ${actionCalls.map(c => c.path).join(', ')})`);
             } else {
@@ -827,7 +939,8 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
                 report.push({
                     step: step.desc,
                     result: 'Failed',
-                    details: '未找到操作方法\n---\nAI搜索记录:\n' + actionResult.history.join('\n')
+                    details: '未找到操作方法\n---\nAI搜索记录:\n' + actionResult.history.join('\n'),
+                    conversationLogs: logConversation ? actionResult.conversationLogs : undefined
                 });
                 stepsHistory.push(`${step.desc} (Failed)`);
             }
@@ -843,14 +956,16 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
                     report.push({
                         step: `验证: ${step.expect}`,
                         result: 'Success',
-                        details: `生成断言代码:\n${callDescriptions}`
+                        details: `生成断言代码:\n${callDescriptions}`,
+                        conversationLogs: logConversation ? assertResult.conversationLogs : undefined
                     });
                 } else {
                     codeLines.push(`${indent}# TODO: 验证 ${step.expect}`);
                     report.push({
                         step: `验证: ${step.expect}`,
                         result: 'Failed',
-                        details: '未找到断言方法\n---\nAI搜索记录:\n' + assertResult.history.join('\n')
+                        details: '未找到断言方法\n---\nAI搜索记录:\n' + assertResult.history.join('\n'),
+                        conversationLogs: logConversation ? assertResult.conversationLogs : undefined
                     });
                 }
             }
@@ -871,7 +986,7 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
     });
 
     // 生成并打开报告
-    const reportHtml = generateHtmlReport(report);
+    const reportHtml = generateHtmlReport(report, logConversation);
     const panel = vscode.window.createWebviewPanel(
         'aiGenerationReport',
         'AI Generation 报告',

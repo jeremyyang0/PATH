@@ -10,6 +10,7 @@ let treeData = [];
 let filteredData = [];
 let expandedItems = new Set();
 let currentSearchKeyword = '';
+let shouldExpandOnUpdate = false;
 
 // 拖拽管理器
 class DragDropManager {
@@ -112,7 +113,7 @@ function saveState() {
     }
 }
 
-function restoreState() {
+function restoreState(updateInput = true) {
     if (vscode) {
         const state = vscode.getState();
         if (state) {
@@ -125,7 +126,9 @@ function restoreState() {
             // 恢复搜索关键词
             if (state.currentSearchKeyword) {
                 currentSearchKeyword = state.currentSearchKeyword;
-                document.getElementById('searchInput').value = currentSearchKeyword;
+                if (updateInput) {
+                    document.getElementById('searchInput').value = currentSearchKeyword;
+                }
             }
             // 重新渲染树
             renderTree();
@@ -148,6 +151,7 @@ function escapeHtml(unsafe) {
 function performSearch() {
     const keyword = document.getElementById('searchInput').value.trim();
     currentSearchKeyword = keyword;
+    shouldExpandOnUpdate = true; // 新的搜索应该触发展开
     saveState(); // 保存状态
     if (vscode) {
         vscode.postMessage({
@@ -452,10 +456,10 @@ window.addEventListener('message', event => {
                 renderTree();
             } else {
                 // 数据更新后恢复状态
-                restoreState();
+                restoreState(false);
 
-                // 如果当前正在搜索，则默认展开所有匹配项
-                if (currentSearchKeyword) {
+                // 如果当前正在搜索，且被标记为需要展开，则默认展开所有匹配项
+                if (currentSearchKeyword && shouldExpandOnUpdate) {
                     // 使用局部函数通过递归收集所有路径
                     const collectPaths = (items) => {
                         for (const item of items) {
@@ -468,6 +472,9 @@ window.addEventListener('message', event => {
                     collectPaths(treeData);
                     saveState(); // 保存新的展开状态
                     renderTree(); // 重新渲染以应用展开状态
+
+                    // 重置标志，后续的更新（如文件保存）不会自动强制展开
+                    shouldExpandOnUpdate = false;
                 }
             }
             break;

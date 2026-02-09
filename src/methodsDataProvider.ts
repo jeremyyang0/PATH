@@ -222,6 +222,10 @@ export class MethodsDataProvider implements vscode.TreeDataProvider<TreeItem> {
             newItem.methodFilePath = item.methodFilePath; // 复制Ele文件路径
             newItem.methodName = item.methodName; // 复制Ele变量名
             newItem.methodLine = item.methodLine; // 复制Ele变量行号
+            newItem.methodDoc = item.methodDoc; // 复制方法文档
+            newItem.eleFilePath = item.eleFilePath; // 复制Ele文件路径
+            newItem.eleVariableName = item.eleVariableName; // 复制Ele变量名
+            newItem.eleLineNumber = item.eleLineNumber; // 复制Ele变量行号
             // 根据是否为叶子节点设置contextValue
             newItem.contextValue = item.isLeaf ? 'methodTreeLeaf' : 'methodTreeFolder';
 
