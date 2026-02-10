@@ -428,19 +428,22 @@ async function searchAndMatchMethod(
             }
 
             candidatesContext = '\n找到的候选方法:\n';
-            const list = filteredCtxCandidates.slice(0, 50).map(c =>
+            const list = filteredCtxCandidates.slice(0, 500).map(c =>
                 `- ${c.codePath} (描述: ${c.label})`
             ).join('\n');
             candidatesContext += list + '\n';
 
-            if (filteredCtxCandidates.length > 50) {
+            if (filteredCtxCandidates.length > 500) {
                 candidatesContext += `...(共 ${filteredCtxCandidates.length} 个结果，已截断)\n`;
             }
         } else if (turn > 0) {
             candidatesContext = '\n当前搜索未找到任何结果。\n';
         }
+        // 获取配置中的应用名称
+        const config = vscode.workspace.getConfiguration('path');
+        let appName = config.get<string>('appName');
 
-        const prompt = `你是一个智能测试代码生成助手,你拥有丰富的电子行业及自动化测试经验。
+        let prompt = `你是一个智能测试代码生成助手,你拥有丰富的电子行业及自动化测试经验。
 ${context}${candidatesContext}
 
 ">",",","->"等符号通常表示多步操作，请将它们拆解成多个方法。
@@ -465,14 +468,24 @@ ${candidateType === 'assert' ? '请找到能验证该预期的断言方法。' :
     ]
 }
 (重要提示：
+
  - 如果候选方法的描述中包含 {{参数名}} 占位符（如 "选择{{name}}"），请尽量从步骤描述中提取该参数的值。·
  - 如果没有参数，args 字段可以省略或留空。
  - codeCalls 列表包含所有需要调用的方法序列。
  - 有时候用户的指令可能会比较模糊（用户描述的一个步骤可能需要多个方法），你可以根据你的经验先找出该步骤中提到的所有实体的可能的候选方法，尝试组织成一个可以实现该步骤的完整逻辑。
+`;
+        if (!appName) {
+            prompt += `
 )
-
+)
 请只回复JSON。`;
-
+        } else {
+            prompt += `
+ - 当前主要测试的应用为"${appName}",如果用户没有在步骤或用例中显示地提到xxx应用（如layout，router，logic），
+ codepath中的应用以"${appName}"为准（如logic.select_component，logic即为应用名），不要去检索其他应用。
+)
+请只回复JSON。`;
+        }
         try {
             const responseText = await callAI(prompt);
             console.log(`Turn ${turn + 1} AI Response:`, responseText);
