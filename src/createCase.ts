@@ -144,12 +144,51 @@ export async function createCase(uri: vscode.Uri): Promise<void> {
     // 构建用例标题和前置条件
     const caseTitle = caseInfo?.title || (trimmedId ? `测试用例 #${trimmedId}` : '测试用例');
     const precondition = caseInfo?.precondition || '';
+    const appClassName = `${trimmedAppName.charAt(0).toUpperCase()}${trimmedAppName.slice(1)}`;
+    const appVarName = trimmedAppName.toLowerCase();
 
-    // 构建前置条件注释
-    let preconditionComment = '';
-    if (precondition) {
-        preconditionComment = `\n前置条件: ${precondition}`;
+    // 前置条件按换行拆分：
+    // - 仅将 "1.xxx" / "1、xxx" 这类编号行转换为 AI 可识别的前置步骤
+    // - 其他行保留为普通注释，不参与 AI 步骤生成
+    const preconditionLines = precondition
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+    const numberedPreconditionPattern = /^\d+\s*[\.、]\s*(.+)$/;
+    const aiPreconditionSteps: string[] = [];
+    const preservedPreconditionNotes: string[] = [];
+
+    for (const line of preconditionLines) {
+        const numberedMatch = line.match(numberedPreconditionPattern);
+        if (numberedMatch) {
+            const cleanedLine = numberedMatch[1]?.trim();
+            if (cleanedLine) {
+                aiPreconditionSteps.push(cleanedLine);
+            }
+        } else {
+            preservedPreconditionNotes.push(line);
+        }
     }
+
+    const preconditionCommentLines: string[] = [];
+    if (preservedPreconditionNotes.length > 0) {
+        preconditionCommentLines.push(...preservedPreconditionNotes.map(line => `        # 前置条件: ${line}`));
+    }
+    if (aiPreconditionSteps.length > 0) {
+        preconditionCommentLines.push(...aiPreconditionSteps.map((line, index) => `        # 前置步骤 ${index + 1}: ${line}`));
+    } else if (!preconditionLines.length) {
+        preconditionCommentLines.push('        # TODO: 前置步骤');
+    }
+
+    const preconditionStepsComment = preconditionCommentLines.join('\n');
+
+    const setupTeardownFixture = `
+    @pytest.fixture(autouse=True, scope='function')
+    def setup_teardown(self, ${appVarName}: ${appClassName}Export):
+${preconditionStepsComment}
+        yield
+`;
 
     // 构建步骤注释
     let stepsComment = '';
@@ -173,12 +212,15 @@ export async function createCase(uri: vscode.Uri): Promise<void> {
 禅道ID: ${trimmedId}
 用例标题: ${caseTitle}
 """
-from method.${trimmedAppName.toLowerCase()} import ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export
+import pytest
+from method.${appVarName} import ${appClassName}Export
 from case.base_case import BaseCase
 
-class Test${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}(BaseCase):
+class Test${appClassName}(BaseCase):
 
-    def ${testName}(self, ${trimmedAppName.toLowerCase()}: ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export):
+${setupTeardownFixture}
+
+    def ${testName}(self, ${appVarName}: ${appClassName}Export):
         """${caseTitle}"""
 ${stepsComment}
 `;
@@ -188,12 +230,15 @@ ${stepsComment}
 """
 测试用例文件: ${testName}.py
 """
-from method.${trimmedAppName.toLowerCase()} import ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export
+import pytest
+from method.${appVarName} import ${appClassName}Export
 from case.base_case import BaseCase
 
-class Test${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}(BaseCase):
+class Test${appClassName}(BaseCase):
 
-    def ${testName}(self, ${trimmedAppName.toLowerCase()}: ${trimmedAppName.charAt(0).toUpperCase() + trimmedAppName.slice(1)}Export):
+${setupTeardownFixture}
+
+    def ${testName}(self, ${appVarName}: ${appClassName}Export):
         """${caseTitle}"""
 ${stepsComment}
 `;

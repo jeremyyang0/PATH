@@ -27,11 +27,16 @@ interface MethodCandidate {
  */
 export interface StepInfo {
     line: number;       // 步骤注释所在行号 (0-indexed)
+    kind: 'precondition' | 'step'; // 步骤类型：前置步骤 / 正常测试步骤
     desc: string;       // 步骤描述
     expect: string;     // 预期结果
     expectLine?: number; // 预期注释所在行号
     hasCode?: boolean;   // 是否已经有代码实现
     existingCode?: string[]; // 已有的代码内容
+}
+
+interface ParseStepOptions {
+    includePreconditions?: boolean;
 }
 
 /**
@@ -161,11 +166,13 @@ async function callAI(prompt: string): Promise<string> {
 /**
  * 从文件内容解析步骤
  */
-export function parseStepsFromFile(content: string): StepInfo[] {
+export function parseStepsFromFile(content: string, options: ParseStepOptions = {}): StepInfo[] {
+    const includePreconditions = options.includePreconditions ?? false;
     const lines = content.split('\n');
     const steps: StepInfo[] = [];
 
-    // 匹配 # 步骤 xxx 格式
+    // 匹配 # 前置步骤 xxx / # 步骤 xxx 格式
+    const preconditionPattern = /^\s*#\s*前置步骤\s*(\d+)?[:\s：]?\s*(.+)/;
     const stepPattern = /^\s*#\s*步骤\s*(\d+)?[:\s：]?\s*(.+)/;
     const expectPattern = /^\s*#\s*预期\s*(\d+)?[:\s：]?\s*(.+)/;
 
@@ -175,6 +182,20 @@ export function parseStepsFromFile(content: string): StepInfo[] {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i] || '';
 
+        const preconditionMatch = line.match(preconditionPattern);
+        if (includePreconditions && preconditionMatch) {
+            if (currentStep) {
+                steps.push(currentStep);
+            }
+            currentStep = {
+                line: i,
+                kind: 'precondition',
+                desc: preconditionMatch[2]?.trim() || '',
+                expect: ''
+            };
+            continue;
+        }
+
         const stepMatch = line.match(stepPattern);
         if (stepMatch) {
             if (currentStep) {
@@ -183,6 +204,7 @@ export function parseStepsFromFile(content: string): StepInfo[] {
             // 开始新步骤
             currentStep = {
                 line: i,
+                kind: 'step',
                 desc: stepMatch[2]?.trim() || '',
                 expect: ''
             };
@@ -190,7 +212,7 @@ export function parseStepsFromFile(content: string): StepInfo[] {
         }
 
         const expectMatch = line.match(expectPattern);
-        if (expectMatch && currentStep) {
+        if (expectMatch && currentStep && currentStep.kind === 'step') {
             currentStep.expect = expectMatch[2]?.trim() || '';
             currentStep.expectLine = i;
         }
@@ -213,6 +235,10 @@ export function parseStepsFromFile(content: string): StepInfo[] {
         const existingCode: string[] = [];
         for (let j = startScan; j < endScan; j++) {
             const lineContent = lines[j]?.trim();
+            const isFixtureYield = step.kind === 'precondition' && !!lineContent && /^yield\b/.test(lineContent);
+            if (isFixtureYield) {
+                continue;
+            }
             // 如果行不为空，且不以#开头，则认为是代码
             if (lineContent && !lineContent.startsWith('#')) {
                 hasCode = true;
@@ -825,10 +851,10 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
     }
 
     const content = document.getText();
-    const steps = parseStepsFromFile(content);
+    const steps = parseStepsFromFile(content, { includePreconditions: true });
 
     if (steps.length === 0) {
-        vscode.window.showInformationMessage('未找到步骤注释 (格式: # 步骤 xxx)');
+        vscode.window.showInformationMessage('未找到步骤注释 (格式: # 前置步骤 xxx 或 # 步骤 xxx)');
         return;
     }
 
@@ -873,21 +899,24 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
             }
 
             const step = sortedSteps[i]!;
+            const isPrecondition = step.kind === 'precondition';
+            const stepLabel = isPrecondition ? `前置: ${step.desc}` : step.desc;
+            const stepTypeText = isPrecondition ? '前置步骤' : '步骤';
 
             if (step.hasCode) {
                 progress.report({
-                    message: `跳过步骤 (已有代码): ${step.desc.substring(0, 20)}...`,
+                    message: `跳过${stepTypeText} (已有代码): ${step.desc.substring(0, 20)}...`,
                     increment: 100 / steps.length
                 });
-                report.push({ step: step.desc, result: 'Skipped', details: '已有代码实现' });
+                report.push({ step: stepLabel, result: 'Skipped', details: '已有代码实现' });
                 // 将已有代码加入上下文，保持逻辑连贯
                 const codeContext = step.existingCode ? step.existingCode.join('; ') : 'Existing Code';
-                stepsHistory.push(`${step.desc} (Context: ${codeContext})`);
+                stepsHistory.push(`${stepLabel} (Context: ${codeContext})`);
                 continue;
             }
 
             progress.report({
-                message: `处理步骤 ${i + 1}/${steps.length}: ${step.desc.substring(0, 20)}...`,
+                message: `处理${stepTypeText} ${i + 1}/${steps.length}: ${step.desc.substring(0, 20)}...`,
                 increment: 100 / steps.length
             });
 
@@ -910,7 +939,7 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
             let assertCalls: MethodCallResult[] = [];
             let assertResult = { calls: [], history: [], conversationLogs: [] } as { calls: MethodCallResult[], history: string[], conversationLogs: ConversationLog[] };
 
-            if (step.expect) {
+            if (!isPrecondition && step.expect) {
                 assertResult = await searchAndMatchMethod(step.expect, allCandidates, 'assert', stepsHistory);
                 assertCalls = assertResult.calls;
             }
@@ -941,25 +970,25 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
                 const callDescriptions = actionCalls.map(c => formatCall(c)).join('\n');
 
                 report.push({
-                    step: step.desc,
+                    step: stepLabel,
                     result: 'Success',
                     details: `生成操作代码:\n${callDescriptions}`,
                     conversationLogs: logConversation ? actionResult.conversationLogs : undefined
                 });
-                stepsHistory.push(`${step.desc} (Code: ${actionCalls.map(c => c.path).join(', ')})`);
+                stepsHistory.push(`${stepLabel} (Code: ${actionCalls.map(c => c.path).join(', ')})`);
             } else {
                 codeLines.push(`${indent}# TODO: ${step.desc}`);
                 report.push({
-                    step: step.desc,
+                    step: stepLabel,
                     result: 'Failed',
                     details: '未找到操作方法\n---\nAI搜索记录:\n' + actionResult.history.join('\n'),
                     conversationLogs: logConversation ? actionResult.conversationLogs : undefined
                 });
-                stepsHistory.push(`${step.desc} (Failed)`);
+                stepsHistory.push(`${stepLabel} (Failed)`);
             }
 
             // Assert 结果处理
-            if (step.expect) {
+            if (!isPrecondition && step.expect) {
                 if (assertCalls.length > 0) {
                     const lines = assertCalls.map(c => `${indent}${formatCall(c)}`);
                     codeLines.push(...lines);

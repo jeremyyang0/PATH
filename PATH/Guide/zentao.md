@@ -54,9 +54,15 @@ PATH 插件深度集成禅道（Zentao）项目管理系统，支持自动拉取
 用例标题: 打开sch文件
 """
 from method.logic import LogicExport
+import pytest
 from case.base_case import BaseCase
 
 class TestLogic(BaseCase):
+    @pytest.fixture(autouse=True, scope='function')
+    def setup_teardown(self, logic: LogicExport):
+        # 前置步骤 1: 启动应用并进入工程页面
+        # 前置步骤 2: 准备测试数据
+        yield
 
     def test_logic_003(self, logic: LogicExport):
         """用户登录功能测试"""
@@ -75,9 +81,14 @@ class TestLogic(BaseCase):
 测试用例文件: test_login_003.py
 """
 from method.logic import LogicExport
+import pytest
 from case.base_case import BaseCase
 
 class TestLogic(BaseCase):
+    @pytest.fixture(autouse=True, scope='function')
+    def setup_teardown(self, logic: LogicExport):
+        # TODO: 前置步骤
+        yield
 
     def test_login_003(self, logic: LogicExport):
         """测试用例"""

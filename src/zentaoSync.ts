@@ -12,7 +12,7 @@ export async function checkAndSyncZentao(document: vscode.TextDocument, zentaoId
 
     try {
         // 1. 获取本地文件中的步骤
-        const localSteps = parseStepsFromFile(document.getText());
+        const localSteps = parseStepsFromFile(document.getText(), { includePreconditions: false });
         if (localSteps.length === 0) {
             console.log('Local file has no steps.');
             return;
