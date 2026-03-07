@@ -1,13 +1,14 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 import { MethodsDataProvider } from './methodsDataProvider';
 import { TreeItem } from './treeItem';
 
 export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'methodsViewer';
     private _view?: vscode.WebviewView;
-    private _dataProvider: MethodsDataProvider;
+    private readonly _dataProvider: MethodsDataProvider;
+    private _isFirstLaunch = true;
 
     constructor(private readonly _extensionUri: vscode.Uri) {
         this._dataProvider = new MethodsDataProvider();
@@ -15,7 +16,7 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
+        _context: vscode.WebviewViewResolveContext,
         _token: vscode.CancellationToken,
     ) {
         this._view = webviewView;
@@ -27,11 +28,10 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-        // 监听来自webview的消息
         webviewView.webview.onDidReceiveMessage(data => {
             switch (data.command) {
                 case 'search':
-                    this._handleSearch(data.keyword);
+                    void this._handleSearch(data.keyword);
                     break;
                 case 'clearSearch':
                     this._handleClearSearch();
@@ -46,13 +46,16 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
                     this._handleCollapseAll();
                     break;
                 case 'openFile':
-                    this._handleOpenFile(data.filePath, data.lineNumber);
+                    void this._handleOpenFile(data.filePath, data.lineNumber);
+                    break;
+                case 'openFolder':
+                    void this._handleOpenFolder(data.folderPath);
                     break;
                 case 'dragToEditor':
                     this._handleDragToEditor(data.codePath);
                     break;
                 case 'jumpToMethod':
-                    this._handleJumpToMethod(data.filePath, data.lineNumber);
+                    void this._handleJumpToMethod(data.filePath, data.lineNumber);
                     break;
                 case 'saveState':
                     this._handleSaveState(data.state);
@@ -60,64 +63,43 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
                 case 'getState':
                     this._handleGetState();
                     break;
-                case 'openInitFile':
-                    this._handleOpenInitFile(data.folderPath);
-                    break;
             }
         });
 
-        // 初始加载数据
-        this._loadData();
+        void this._loadData();
 
-        // 在webview变为可见时恢复状态并刷新数据
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
-                console.log('MethodsTreeWebview became visible, refreshing data...');
-                // webview变为可见时，自动刷新数据
-                this._handleRefresh();
-                // 发送恢复状态的消息
+                void this._handleRefresh();
                 this._postMessage({ command: 'restoreState' });
             }
         });
     }
 
-    private _isFirstLaunch = true;
-
     private _getHtmlForWebview(webview: vscode.Webview): string {
         try {
             const htmlPath = path.join(this._extensionUri.fsPath, 'resources', 'methodsTreeViewer.html');
-            console.log('Reading HTML file from:', htmlPath);
-
             if (!fs.existsSync(htmlPath)) {
-                console.error('HTML file not found:', htmlPath);
                 throw new Error(`HTML file not found: ${htmlPath}`);
             }
 
             let html = fs.readFileSync(htmlPath, 'utf8');
-
-            // 获取资源URI
             const jsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'methodsTreeViewer.js'));
-            console.log('JS URI:', jsUri.toString());
-
-            // 替换资源路径
             html = html.replace('src="methodsTreeViewer.js"', `src="${jsUri}"`);
-
             return html;
         } catch (error) {
-            console.error('Error loading HTML for methodsTreeViewer:', error);
-            // 返回一个简单的错误页面
             return `<!DOCTYPE html>
             <html>
             <head><title>Error</title></head>
             <body>
                 <h1>加载错误</h1>
-                <p>无法加载Methods Tree Viewer: ${error instanceof Error ? error.message : String(error)}</p>
+                <p>无法加载 Methods Tree Viewer: ${error instanceof Error ? error.message : String(error)}</p>
             </body>
             </html>`;
         }
     }
 
-    private async _loadData() {
+    private async _loadData(): Promise<void> {
         try {
             await this._dataProvider.loadData();
             const data = await this._getTreeData();
@@ -132,130 +114,67 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private async _getTreeData(): Promise<any[]> {
-        return new Promise((resolve) => {
-            this._dataProvider.getChildren().then(items => {
-                const treeData = this._convertTreeItems(items);
-                resolve(treeData);
-            });
-        });
+    private async _getTreeData(): Promise<Record<string, unknown>[]> {
+        const items = await this._dataProvider.getChildren();
+        return this._convertTreeItems(items);
     }
 
-    private _convertTreeItems(items: TreeItem[]): any[] {
-        return items.map(item => {
-            // 调试文件路径
-            if (item.methodFilePath) {
-                console.log('Original method file path:', item.methodFilePath);
-            }
-            return {
-                label: typeof item.label === 'string' ? item.label : item.label?.label || '',
-                fullPath: item.fullPath,
-                codePath: item.codePath,
-                isLeaf: item.isLeaf,
-                tooltip: item.tooltip,
-                methodFilePath: item.methodFilePath,
-                methodName: item.methodName,
-                methodLine: item.methodLine,
-                methodDoc: item.methodDoc,
-                children: item.children ? this._convertTreeItems(item.children) : []
-            };
-        });
+    private _convertTreeItems(items: TreeItem[]): Record<string, unknown>[] {
+        return items.map(item => ({
+            label: typeof item.label === 'string' ? item.label : item.label?.label || '',
+            fullPath: item.fullPath,
+            filePath: item.filePath,
+            codePath: item.codePath,
+            isLeaf: item.isLeaf,
+            nodeType: item.nodeType,
+            tooltip: item.tooltip,
+            methodFilePath: item.methodFilePath,
+            methodName: item.methodName,
+            methodLine: item.methodLine,
+            methodDoc: item.methodDoc,
+            children: item.children ? this._convertTreeItems(item.children) : []
+        }));
     }
 
-    private _postMessage(message: any) {
+    private _postMessage(message: Record<string, unknown>): void {
         if (this._view) {
-            this._view.webview.postMessage(message);
+            void this._view.webview.postMessage(message);
         }
     }
 
-    private async _handleSearch(keyword: string) {
-        console.log('Searching for keyword in methods:', keyword);
+    private async _handleSearch(keyword: string): Promise<void> {
         if (keyword) {
-            // 调用dataProvider的search方法并设置关键词
-            (this._dataProvider as any).searchKeyword = keyword;
-            (this._dataProvider as any).applySearch();
-            (this._dataProvider as any)._onDidChangeTreeData.fire();
+            this._dataProvider.applySearchKeyword(keyword);
         } else {
             this._dataProvider.clearSearch();
         }
         await this._loadData();
     }
 
-    private _handleClearSearch() {
+    private _handleClearSearch(): void {
         this._dataProvider.clearSearch();
-        this._loadData();
+        void this._loadData();
     }
 
-    private _handleRefresh() {
-        this._dataProvider.refresh();
-        this._loadData();
+    private async _handleRefresh(): Promise<void> {
+        await this._loadData();
     }
 
-    private _handleExpandAll() {
+    private _handleExpandAll(): void {
         this._dataProvider.expandAll();
         this._postMessage({ command: 'expandAll' });
     }
 
-    private _handleCollapseAll() {
+    private _handleCollapseAll(): void {
         this._dataProvider.collapseAll();
     }
 
-    private async _handleOpenFile(filePath: string, lineNumber: number) {
-        await vscode.commands.executeCommand('methodsViewer.openFile', filePath, lineNumber);
+    private async _handleOpenFile(filePath: string, lineNumber?: number): Promise<void> {
+        await vscode.commands.executeCommand('methodsViewer.openFile', filePath, lineNumber || 1);
     }
 
-    private _handleDragToEditor(codePath: string) {
-        // 创建一个TreeItem兼容的对象
-        const element = {
-            codePath: codePath,
-            isLeaf: true
-        };
-        vscode.commands.executeCommand('methodsViewer.dragToEditor', element);
-    }
-
-    private async _handleJumpToMethod(filePath: string, lineNumber: number) {
-        console.log('_handleJumpToMethod received:', filePath, 'line:', lineNumber);
-        // 确保路径使用正确的分隔符
-        const normalizedPath = filePath.replace(/[\/\\]+/g, '\\');
-        console.log('Normalized method path:', normalizedPath);
-        await vscode.commands.executeCommand('methodsViewer.jumpToMethod', { methodFilePath: normalizedPath, methodLine: lineNumber });
-    }
-
-    private _handleSaveState(state: any) {
-        // 保存状态到VS Code的状态存储
-        if (this._view) {
-            this._view.webview.postMessage({
-                command: 'setState',
-                state: state
-            });
-        }
-    }
-
-    private _handleGetState() {
-        // 请求webview发送当前状态
-        if (this._view) {
-            this._view.webview.postMessage({
-                command: 'requestState'
-            });
-        }
-    }
-
-    private async _handleOpenInitFile(folderPath: string) {
-        // folderPath 是点分隔的模块路径，如 "logic.logic_editor.dialog"
-        // 需要转换为实际文件系统路径
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) {
-            vscode.window.showWarningMessage('未找到工作区文件夹');
-            return;
-        }
-
-        // 将点分隔的路径转换为文件系统路径
-        const relativePath = folderPath.replace(/\./g, path.sep);
-        const fullFolderPath = path.join(workspaceFolder.uri.fsPath, 'method', relativePath);
-        const initFilePath = path.join(fullFolderPath, '__init__.py');
-
-        console.log('Opening __init__.py:', initFilePath);
-
+    private async _handleOpenFolder(folderPath: string): Promise<void> {
+        const initFilePath = path.join(folderPath, '__init__.py');
         if (fs.existsSync(initFilePath)) {
             await vscode.commands.executeCommand('methodsViewer.openFile', initFilePath, 1);
         } else {
@@ -263,7 +182,37 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    public refresh() {
-        this._handleRefresh();
+    private _handleDragToEditor(codePath: string): void {
+        const element = {
+            codePath,
+            isLeaf: true
+        };
+        void vscode.commands.executeCommand('methodsViewer.dragToEditor', element);
     }
-} 
+
+    private async _handleJumpToMethod(filePath: string, lineNumber: number): Promise<void> {
+        const normalizedPath = filePath.replace(/[\/\\]+/g, '\\');
+        await vscode.commands.executeCommand('methodsViewer.jumpToMethod', { methodFilePath: normalizedPath, methodLine: lineNumber });
+    }
+
+    private _handleSaveState(state: unknown): void {
+        if (this._view) {
+            void this._view.webview.postMessage({
+                command: 'setState',
+                state
+            });
+        }
+    }
+
+    private _handleGetState(): void {
+        if (this._view) {
+            void this._view.webview.postMessage({
+                command: 'requestState'
+            });
+        }
+    }
+
+    public refresh(): void {
+        void this._handleRefresh();
+    }
+}

@@ -1,23 +1,26 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { TreeItem, TreeNode } from './treeItem';
 import { DragAndDropController } from './dragAndDropController';
-import { EleParser, ParseResult, FileResult, EleVariable } from './parseEle';
+import { orderItemsByDirectoryFile, ORDER_FILE_NAME } from './orderUtils';
+import { EleParser, EleVariable, FileResult, ParseResult } from './parseEle';
+import { TreeItem } from './treeItem';
 
 /**
- * Ele变量树形数据提供者
+ * Ele tree data provider.
  */
 export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     public readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private data: TreeItem[] = [];
-    private originalData: TreeItem[] = []; // 存储原始数据
-    private searchKeyword: string = ''; // 搜索关键词
-    private packageNames: { [key: string]: string } = {}; // 存储包名的中文映射
+    private originalData: TreeItem[] = [];
+    private searchKeyword: string = '';
+    private packageNames: { [key: string]: string } = {};
     public readonly dragAndDropController = new DragAndDropController();
 
     public refresh(): void {
-        this.loadData();
+        void this.loadData();
     }
 
     public getTreeItem(element: TreeItem): vscode.TreeItem {
@@ -41,16 +44,52 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
                 return;
             }
 
-            const data = await this.parseEleFiles(workspaceFolder.uri.fsPath);
+            const workspacePath = workspaceFolder.uri.fsPath;
+            const data = await this.parseEleFiles(workspacePath);
             this.packageNames = data.package_names || {};
-            this.originalData = this.buildTreeData(data.results || []);
+            this.originalData = this.buildTreeData(workspacePath, data.results || []);
             this.applySearch();
             this._onDidChangeTreeData.fire();
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            vscode.window.showErrorMessage('加载Ele变量数据失败: ' + errorMessage);
+            vscode.window.showErrorMessage('加载 Ele 变量数据失败: ' + errorMessage);
             this.data = [];
             this.originalData = [];
+        }
+    }
+
+    public applySearchKeyword(keyword: string): void {
+        this.searchKeyword = keyword;
+        this.applySearch();
+        this._onDidChangeTreeData.fire();
+    }
+
+    public clearSearch(): void {
+        this.searchKeyword = '';
+        this.applySearch();
+        this._onDidChangeTreeData.fire();
+    }
+
+    public expandAll(): void {
+        this.setAllNodesCollapsed(this.data, false);
+        this._onDidChangeTreeData.fire();
+    }
+
+    public collapseAll(): void {
+        this.setAllNodesCollapsed(this.data, true);
+        this._onDidChangeTreeData.fire();
+    }
+
+    public async search(): Promise<void> {
+        const keyword = await vscode.window.showInputBox({
+            prompt: '请输入搜索关键词',
+            placeHolder: '搜索 Ele 变量或目录',
+            value: this.searchKeyword
+        });
+        if (keyword !== undefined) {
+            this.searchKeyword = keyword;
+            this.applySearch();
+            this._onDidChangeTreeData.fire();
         }
     }
 
@@ -59,121 +98,192 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
         return parser.parseAllFiles();
     }
 
-    private buildTreeData(results: FileResult[]): TreeItem[] {
-        const rootNodes: { [key: string]: TreeNode } = {};
-        // 构建树形结构
+    private buildTreeData(workspacePath: string, results: FileResult[]): TreeItem[] {
+        const methodDir = path.join(workspacePath, 'method');
+        if (!fs.existsSync(methodDir)) {
+            return [];
+        }
+
+        const resultsByFile = new Map<string, FileResult[]>();
         for (const result of results) {
-            const filePath = result.file_path;
-            const pathParts = this.parseFilePath(filePath);
-            let currentLevel = rootNodes;
-            let currentParent: TreeItem | null = null;
-            let currentPath = '';
-            let currentCodePath = '';
-            for (let i = 0; i < pathParts.length; i++) {
-                const part = pathParts[i];
-                if (!part) { continue; }
-                currentPath = currentPath ? `${currentPath}.${part}` : part;
-                currentCodePath = currentCodePath ? `${currentCodePath}.${part}` : part;
-                if (!currentLevel[part]) {
-                    const displayName = this.getDisplayName(part, pathParts.slice(0, i + 1).join('/'));
-                    const treeItem = new TreeItem(
-                        displayName,
-                        vscode.TreeItemCollapsibleState.Collapsed
-                    );
-                    treeItem.children = [];
-                    treeItem.fullPath = currentPath;
-                    treeItem.codePath = currentCodePath;
-                    treeItem.isLeaf = false;
-                    treeItem.contextValue = 'eleTreeFolder';
-                    currentLevel[part] = {
-                        item: treeItem,
-                        children: {}
-                    };
-                    if (currentParent) {
-                        currentParent.children!.push(treeItem);
-                    }
-                }
-                currentParent = currentLevel[part]!.item;
-                currentLevel = currentLevel[part]!.children;
+            const fileName = path.basename(result.file_path).toLowerCase();
+            if (!this.isElementFileName(fileName)) {
+                continue;
             }
-            const rootItems: { [key: string]: TreeItem } = {};
-            const childItems: EleVariable[] = [];
-            for (const eleVar of result.ele_variables) {
-                const displayName = eleVar.desc || eleVar.name;
-                const hierarchy = eleVar.hierarchy || [];
-                if (hierarchy.length === 1) {
-                    const treeItem = new TreeItem(
-                        displayName,
-                        vscode.TreeItemCollapsibleState.None,
-                        {
-                            command: 'eleTreeViewer.openFile',
-                            title: '打开文件',
-                            arguments: [result.file_path, eleVar.line]
-                        }
-                    );
-                    treeItem.tooltip = `第${eleVar.line}行: ${eleVar.value}`;
-                    treeItem.children = [];
-                    treeItem.fullPath = currentParent ? `${currentParent.fullPath}.${displayName}` : displayName;
-                    treeItem.codePath = currentParent ? `${currentParent.codePath}.${eleVar.name}` : eleVar.name;
-                    treeItem.isLeaf = true;
-                    treeItem.contextValue = 'eleTreeLeaf';
-                    treeItem.eleFilePath = result.file_path;
-                    treeItem.eleVariableName = eleVar.name;
-                    treeItem.eleLineNumber = eleVar.line;
-                    rootItems[displayName] = treeItem;
-                    if (currentParent) {
-                        currentParent.children!.push(treeItem);
-                    }
-                } else if (hierarchy.length > 1) {
-                    childItems.push(eleVar);
-                }
-            }
-            for (const eleVar of childItems) {
-                const hierarchy = eleVar.hierarchy || [];
-                if (hierarchy.length > 1) {
-                    const parentName = hierarchy[0];
-                    const childName = hierarchy[hierarchy.length - 1];
-                    if (parentName && childName && rootItems[parentName]) {
-                        const childItem = new TreeItem(
-                            childName,
-                            vscode.TreeItemCollapsibleState.None,
-                            {
-                                command: 'eleTreeViewer.openFile',
-                                title: '打开文件',
-                                arguments: [result.file_path, eleVar.line]
-                            }
-                        );
-                        childItem.tooltip = `第${eleVar.line}行: ${eleVar.value}`;
-                        childItem.fullPath = rootItems[parentName]!.fullPath + '.' + childName;
-                        childItem.codePath = currentParent ? `${currentParent.codePath}.${eleVar.name}` : eleVar.name;
-                        childItem.isLeaf = true;
-                        childItem.contextValue = 'eleTreeLeaf';
-                        childItem.eleFilePath = result.file_path;
-                        childItem.eleVariableName = eleVar.name;
-                        childItem.eleLineNumber = eleVar.line;
-                        if (rootItems[parentName]!.children!.length === 0) {
-                            rootItems[parentName]!.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
-                        }
-                        rootItems[parentName]!.children!.push(childItem);
-                    }
-                }
+            const key = path.normalize(result.file_path);
+            const bucket = resultsByFile.get(key);
+            if (bucket) {
+                bucket.push(result);
+            } else {
+                resultsByFile.set(key, [result]);
             }
         }
-        return this.flattenTree(rootNodes);
+
+        return this.buildDirectoryChildren(methodDir, [], resultsByFile);
     }
 
-    private parseFilePath(filePath: string): string[] {
-        const pathParts = filePath.split(/[\/\\]/);
-        const methodIndex = pathParts.indexOf('method');
-        if (methodIndex !== -1) {
-            return pathParts.slice(methodIndex + 1, -1);
+    private buildDirectoryChildren(
+        directoryPath: string,
+        relativeParts: string[],
+        resultsByFile: Map<string, FileResult[]>
+    ): TreeItem[] {
+        const entries = fs.readdirSync(directoryPath, { withFileTypes: true });
+        const relevantEntries = entries.filter(entry => {
+            if (entry.name === ORDER_FILE_NAME) {
+                return false;
+            }
+
+            if (entry.isDirectory()) {
+                return true;
+            }
+
+            return entry.isFile() && this.isElementFileName(entry.name);
+        });
+
+        const orderedEntries = orderItemsByDirectoryFile(directoryPath, relevantEntries, entry => entry.name);
+        const items: TreeItem[] = [];
+
+        for (const entry of orderedEntries) {
+            const fullEntryPath = path.join(directoryPath, entry.name);
+            if (entry.isDirectory()) {
+                items.push(this.createFolderItem(fullEntryPath, relativeParts, entry.name, resultsByFile));
+                continue;
+            }
+
+            items.push(...this.createElementItemsForFile(fullEntryPath, relativeParts, resultsByFile));
         }
-        return pathParts.slice(0, -1);
+
+        return items;
     }
 
-    /**
-     * 获取路径部分的中文显示名称
-     */
+    private createFolderItem(
+        directoryPath: string,
+        parentRelativeParts: string[],
+        folderName: string,
+        resultsByFile: Map<string, FileResult[]>
+    ): TreeItem {
+        const relativeParts = [...parentRelativeParts, folderName];
+        const displayPath = relativeParts.join('/');
+        const children = this.buildDirectoryChildren(directoryPath, relativeParts, resultsByFile);
+        const collapsibleState = children.length > 0
+            ? vscode.TreeItemCollapsibleState.Collapsed
+            : vscode.TreeItemCollapsibleState.None;
+
+        const treeItem = new TreeItem(this.getDisplayName(folderName, displayPath), collapsibleState);
+        treeItem.children = children;
+        treeItem.filePath = directoryPath;
+        treeItem.entryName = folderName;
+        treeItem.fullPath = this.normalizeRelativePath(displayPath);
+        treeItem.codePath = relativeParts.join('.');
+        treeItem.isLeaf = false;
+        treeItem.nodeType = 'folder';
+        treeItem.contextValue = 'eleTreeFolder';
+        return treeItem;
+    }
+
+    private createElementItemsForFile(
+        filePath: string,
+        parentRelativeParts: string[],
+        resultsByFile: Map<string, FileResult[]>
+    ): TreeItem[] {
+        const results = resultsByFile.get(path.normalize(filePath)) || [];
+        const parentFullPath = parentRelativeParts.join('.');
+        const parentCodePath = parentRelativeParts.join('.');
+        const items: TreeItem[] = [];
+
+        for (const result of results) {
+            items.push(...this.createElementItemsForResult(result, parentFullPath, parentCodePath));
+        }
+
+        return items;
+    }
+
+    private isElementFileName(fileName: string): boolean {
+        return fileName.toLowerCase().endsWith('ele.py');
+    }
+
+    private createElementItemsForResult(result: FileResult, parentFullPath: string, parentCodePath: string): TreeItem[] {
+        const rootItems = new Map<string, TreeItem>();
+        const childItems: EleVariable[] = [];
+        const items: TreeItem[] = [];
+
+        for (const eleVar of result.ele_variables) {
+            const displayName = eleVar.desc || eleVar.name;
+            const hierarchy = eleVar.hierarchy || [];
+
+            if (hierarchy.length === 1) {
+                const treeItem = new TreeItem(
+                    displayName,
+                    vscode.TreeItemCollapsibleState.None,
+                    {
+                        command: 'eleTreeViewer.openFile',
+                        title: '打开文件',
+                        arguments: [result.file_path, eleVar.line]
+                    }
+                );
+                treeItem.tooltip = `第${eleVar.line}行: ${eleVar.value}`;
+                treeItem.children = [];
+                treeItem.fullPath = parentFullPath ? `${parentFullPath}.${displayName}` : displayName;
+                treeItem.codePath = parentCodePath ? `${parentCodePath}.${eleVar.name}` : eleVar.name;
+                treeItem.isLeaf = true;
+                treeItem.nodeType = 'element';
+                treeItem.contextValue = 'eleTreeLeaf';
+                treeItem.eleFilePath = result.file_path;
+                treeItem.eleVariableName = eleVar.name;
+                treeItem.eleLineNumber = eleVar.line;
+                treeItem.filePath = result.file_path;
+                treeItem.entryName = eleVar.name;
+                rootItems.set(displayName, treeItem);
+                items.push(treeItem);
+            } else if (hierarchy.length > 1) {
+                childItems.push(eleVar);
+            }
+        }
+
+        for (const eleVar of childItems) {
+            const hierarchy = eleVar.hierarchy || [];
+            const parentName = hierarchy[0];
+            const childName = hierarchy[hierarchy.length - 1];
+            if (!parentName || !childName) {
+                continue;
+            }
+
+            const parentItem = rootItems.get(parentName);
+            if (!parentItem) {
+                continue;
+            }
+
+            const childItem = new TreeItem(
+                childName,
+                vscode.TreeItemCollapsibleState.None,
+                {
+                    command: 'eleTreeViewer.openFile',
+                    title: '打开文件',
+                    arguments: [result.file_path, eleVar.line]
+                }
+            );
+            childItem.tooltip = `第${eleVar.line}行: ${eleVar.value}`;
+            childItem.fullPath = `${parentItem.fullPath}.${childName}`;
+            childItem.codePath = parentCodePath ? `${parentCodePath}.${eleVar.name}` : eleVar.name;
+            childItem.isLeaf = true;
+            childItem.nodeType = 'element';
+            childItem.contextValue = 'eleTreeLeaf';
+            childItem.eleFilePath = result.file_path;
+            childItem.eleVariableName = eleVar.name;
+            childItem.eleLineNumber = eleVar.line;
+            childItem.filePath = result.file_path;
+            childItem.entryName = eleVar.name;
+
+            if ((parentItem.children || []).length === 0) {
+                parentItem.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+            }
+            parentItem.children = parentItem.children || [];
+            parentItem.children.push(childItem);
+        }
+
+        return items;
+    }
+
     private getDisplayName(pathPart: string, fullPath: string): string {
         const packagePath = 'method.' + fullPath.replace(/\//g, '.');
         if (this.packageNames[packagePath]) {
@@ -185,20 +295,10 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
         return pathPart;
     }
 
-    private flattenTree(nodeDict: { [key: string]: TreeNode }): TreeItem[] {
-        const result: TreeItem[] = [];
-        for (const key in nodeDict) {
-            const node = nodeDict[key];
-            if (node) {
-                result.push(node.item);
-            }
-        }
-        return result;
+    private normalizeRelativePath(relativePath: string): string {
+        return relativePath.replace(/\\/g, '/');
     }
 
-    /**
-     * 应用搜索过滤
-     */
     private applySearch(): void {
         if (!this.searchKeyword) {
             this.data = this.originalData;
@@ -216,20 +316,11 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
         this.data = filtered;
     }
 
-    /**
-     * 递归过滤树项
-     */
     private filterTreeItem(item: TreeItem, keyword: string): TreeItem | null {
-        if (!item) { return null; }
-
         const keywordLower = keyword.toLowerCase();
         const itemLabel = typeof item.label === 'string' ? item.label : (item.label?.label || '');
-        const itemLabelLower = itemLabel.toLowerCase();
+        const currentMatches = itemLabel.toLowerCase().includes(keywordLower);
 
-        // 检查当前项是否匹配
-        const currentMatches = itemLabelLower.includes(keywordLower);
-
-        // 递归过滤子项
         const filteredChildren: TreeItem[] = [];
         if (item.children) {
             for (const child of item.children) {
@@ -240,78 +331,32 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
             }
         }
 
-        // 如果当前项匹配或有匹配的子项，则包含此项
-        if (currentMatches || filteredChildren.length > 0) {
-            const newItem = new TreeItem(
-                itemLabel,
-                item.collapsibleState || vscode.TreeItemCollapsibleState.None
-            );
-            newItem.tooltip = item.tooltip;
-            newItem.fullPath = item.fullPath;
-            newItem.codePath = item.codePath;
-            newItem.isLeaf = item.isLeaf;
-            newItem.children = filteredChildren;
-            newItem.eleFilePath = item.eleFilePath; // 复制Ele文件路径
-            newItem.eleVariableName = item.eleVariableName; // 复制Ele变量名
-            newItem.eleLineNumber = item.eleLineNumber; // 复制Ele变量行号
-            // 根据是否为叶子节点设置contextValue
-            newItem.contextValue = item.isLeaf ? 'eleTreeLeaf' : 'eleTreeFolder';
-
-            // 如果有匹配的子项，设置为展开状态
-            if (filteredChildren.length > 0) {
-                newItem.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-            }
-
-            return newItem;
+        if (!currentMatches && filteredChildren.length === 0) {
+            return null;
         }
 
-        return null;
+        const newItem = new TreeItem(
+            itemLabel,
+            filteredChildren.length > 0
+                ? vscode.TreeItemCollapsibleState.Expanded
+                : (item.collapsibleState ?? vscode.TreeItemCollapsibleState.None)
+        );
+
+        newItem.tooltip = item.tooltip;
+        newItem.fullPath = item.fullPath;
+        newItem.codePath = item.codePath;
+        newItem.isLeaf = item.isLeaf;
+        newItem.nodeType = item.nodeType;
+        newItem.filePath = item.filePath;
+        newItem.entryName = item.entryName;
+        newItem.children = filteredChildren;
+        newItem.eleFilePath = item.eleFilePath;
+        newItem.eleVariableName = item.eleVariableName;
+        newItem.eleLineNumber = item.eleLineNumber;
+        newItem.contextValue = item.contextValue;
+        return newItem;
     }
 
-    /**
-     * 搜索功能
-     */
-    public async search(): Promise<void> {
-        const keyword = await vscode.window.showInputBox({
-            prompt: '请输入搜索关键词',
-            placeHolder: '搜索Ele变量（支持中文描述或变量名）',
-            value: this.searchKeyword
-        });
-        if (keyword !== undefined) {
-            this.searchKeyword = keyword;
-            this.applySearch();
-            this._onDidChangeTreeData.fire();
-        }
-    }
-
-    /**
-     * 清除搜索
-     */
-    public clearSearch(): void {
-        this.searchKeyword = '';
-        this.applySearch();
-        this._onDidChangeTreeData.fire();
-    }
-
-    /**
-     * 展开所有节点
-     */
-    public expandAll(): void {
-        this.setAllNodesCollapsed(this.data, false);
-        this._onDidChangeTreeData.fire();
-    }
-
-    /**
-     * 收起所有节点
-     */
-    public collapseAll(): void {
-        this.setAllNodesCollapsed(this.data, true);
-        this._onDidChangeTreeData.fire();
-    }
-
-    /**
-     * 递归设置节点的展开/收起状态
-     */
     private setAllNodesCollapsed(items: TreeItem[], collapsed: boolean): void {
         for (const item of items) {
             if (item.children && item.children.length > 0) {
@@ -322,4 +367,4 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
             }
         }
     }
-} 
+}

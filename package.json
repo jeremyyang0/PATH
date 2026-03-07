@@ -1,8 +1,8 @@
 {
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
-  "description": "Python自动化测试助手 - 智能解析Ele变量和方法，提供树形结构浏览和自动化测试代码生成",
-  "version": "1.5.3",
+  "description": "Python 自动化测试辅助插件，提供元素树、方法树、PATH 文件树和 AI 代码生成功能",
+  "version": "2.0.0",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -14,7 +14,8 @@
     "onStartupFinished",
     "onLanguage:python",
     "onCommand:eleTreeViewer.refresh",
-    "onCommand:methodsViewer.refresh"
+    "onCommand:methodsViewer.refresh",
+    "onCommand:pathFileTree.refresh"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -47,6 +48,11 @@
           "type": "webview",
           "when": "true",
           "icon": "resources/icons/methods-tree.svg"
+        },
+        {
+          "id": "pathFileTree",
+          "name": "PATH 文件树",
+          "when": "true"
         }
       ],
       "eleSecondaryViewContainer": [
@@ -69,6 +75,51 @@
         "command": "methodsViewer.refresh",
         "title": "刷新",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "pathFileTree.refresh",
+        "title": "刷新",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pathFileTree.openItem",
+        "title": "打开"
+      },
+      {
+        "command": "pathFileTree.newFile",
+        "title": "新建文件..."
+      },
+      {
+        "command": "pathFileTree.newFolder",
+        "title": "新建文件夹..."
+      },
+      {
+        "command": "pathFileTree.rename",
+        "title": "重命名"
+      },
+      {
+        "command": "pathFileTree.delete",
+        "title": "删除"
+      },
+      {
+        "command": "pathFileTree.revealInOS",
+        "title": "在系统资源管理器中显示"
+      },
+      {
+        "command": "pathFileTree.copyPath",
+        "title": "复制路径"
+      },
+      {
+        "command": "pathFileTree.copyRelativePath",
+        "title": "复制相对路径"
+      },
+      {
+        "command": "pathFileTree.findInFolder",
+        "title": "在文件夹中搜索"
+      },
+      {
+        "command": "pathFileTree.createCase",
+        "title": "Create Case (创建用例)"
       },
       {
         "command": "eleTreeViewer.dragToEditor",
@@ -155,6 +206,63 @@
           "command": "methodsViewer.refresh",
           "when": "view == methodsViewer",
           "group": "navigation"
+        },
+        {
+          "command": "pathFileTree.refresh",
+          "when": "view == pathFileTree",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pathFileTree.openItem",
+          "when": "view == pathFileTree && viewItem == pathFileTreeFile",
+          "group": "inline"
+        },
+        {
+          "command": "pathFileTree.newFile",
+          "when": "view == pathFileTree",
+          "group": "0_new@1"
+        },
+        {
+          "command": "pathFileTree.newFolder",
+          "when": "view == pathFileTree",
+          "group": "0_new@2"
+        },
+        {
+          "command": "pathFileTree.rename",
+          "when": "view == pathFileTree",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "pathFileTree.delete",
+          "when": "view == pathFileTree",
+          "group": "1_modification@2"
+        },
+        {
+          "command": "pathFileTree.revealInOS",
+          "when": "view == pathFileTree",
+          "group": "2_cutcopypaste@1"
+        },
+        {
+          "command": "pathFileTree.copyPath",
+          "when": "view == pathFileTree",
+          "group": "2_cutcopypaste@2"
+        },
+        {
+          "command": "pathFileTree.copyRelativePath",
+          "when": "view == pathFileTree",
+          "group": "2_cutcopypaste@3"
+        },
+        {
+          "command": "pathFileTree.findInFolder",
+          "when": "view == pathFileTree && viewItem == pathFileTreeFolder",
+          "group": "3_search"
+        },
+        {
+          "command": "pathFileTree.createCase",
+          "when": "view == pathFileTree",
+          "group": "4_workspace"
         }
       ],
       "explorer/context": [
@@ -176,6 +284,28 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "pathFileTree.newFile",
+        "key": "a",
+        "when": "listFocus && focusedView == 'pathFileTree' && !inputFocus"
+      },
+      {
+        "command": "pathFileTree.newFolder",
+        "key": "shift+a",
+        "when": "listFocus && focusedView == 'pathFileTree' && !inputFocus"
+      },
+      {
+        "command": "pathFileTree.rename",
+        "key": "f2",
+        "when": "listFocus && focusedView == 'pathFileTree' && !inputFocus"
+      },
+      {
+        "command": "pathFileTree.delete",
+        "key": "delete",
+        "when": "listFocus && focusedView == 'pathFileTree' && !inputFocus"
+      }
+    ],
     "configuration": {
       "title": "PATH Plugin Settings",
       "properties": {
@@ -203,27 +333,27 @@
         "path.markrunner.contextLaunchConfigName": {
           "type": "string",
           "default": "MarkRunner Context Debug",
-          "description": "MarkRunner调试右键菜单使用的Launch Config名称。如果在launch.json中找到同名配置，将使用该配置（忽略args等动态生成参数）；如果未找到，将使用默认配置。"
+          "description": "右键调试用例时使用的 Launch Config 名称"
         },
         "path.ai.url": {
           "type": "string",
           "default": "",
-          "description": "AI模型服务URL (例如: http://127.0.0.1:8045/v1)"
+          "description": "AI 模型服务 URL (例如: http://127.0.0.1:8045/v1)"
         },
         "path.ai.apiKey": {
           "type": "string",
           "default": "",
-          "description": "AI API密钥"
+          "description": "AI API 密钥"
         },
         "path.ai.model": {
           "type": "string",
           "default": "",
-          "description": "AI模型名称 (例如: gemini-3-flash)"
+          "description": "AI 模型名称 (例如: gemini-3-flash)"
         },
         "path.ai.logConversation": {
           "type": "boolean",
           "default": false,
-          "description": "记录对话过程 (勾选后生成的报告中会包含AI对话的详细过程)"
+          "description": "记录 AI 对话过程"
         }
       }
     }
@@ -246,9 +376,9 @@
     "@types/node": "14.x",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
+    "@vscode/test-electron": "^2.3.4",
     "eslint": "^8.44.0",
-    "typescript": "^5.1.6",
-    "@vscode/test-electron": "^2.3.4"
+    "typescript": "^5.1.6"
   },
   "dependencies": {}
 }

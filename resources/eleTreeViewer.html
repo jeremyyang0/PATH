@@ -211,6 +211,29 @@
             background-color: currentColor;
         }
 
+        .icon-folder {
+            width: 12px;
+            height: 9px;
+            background-color: var(--vscode-symbolIcon-folderForeground, currentColor);
+            border-radius: 2px;
+            position: relative;
+        }
+
+        .icon-folder::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: 1px;
+            width: 5px;
+            height: 4px;
+            background-color: inherit;
+            border-radius: 2px 2px 0 0;
+        }
+
+        .tree-item.selected .icon-folder {
+            background-color: currentColor;
+        }
+
         /* Labels */
         .tree-label {
             flex: 1;
