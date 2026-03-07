@@ -78,7 +78,7 @@ export class EleParser {
             const lines = content.split(/\r?\n/);
 
             // 正则匹配类定义
-            const classDefRegex = /^class\s+(\w+)(?:\s*\([^)]*\))?\s*:/;
+            const classDefRegex = /^class\s+([^\s(:]+)(?:\s*\([^)]*\))?\s*:/;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
@@ -164,10 +164,6 @@ export class EleParser {
                         if (chineseName) {
                             this.packageNames[packageName] = chineseName;
                             // 也为目录名存储映射
-                            const dirName = path.basename(fullPath);
-                            if (dirName) {
-                                this.packageNames[dirName] = chineseName;
-                            }
                         }
                     }
 
@@ -543,6 +539,7 @@ export class EleParser {
      * 解析所有 Python 文件
      */
     public async parseAllFiles(): Promise<ParseResult> {
+        this.packageNames = {};
         // 先扫描所有包的中文名称
         this.scanPackages();
 

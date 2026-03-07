@@ -140,15 +140,12 @@ export class MethodsDataProvider implements vscode.TreeDataProvider<TreeItem> {
      * 获取路径部分的中文显示名称
      */
     private getDisplayName(pathPart: string, fullPath: string): string {
-        if (this.packageNames[pathPart]) {
-            return this.packageNames[pathPart];
-        }
-        if (this.packageNames[fullPath]) {
-            return this.packageNames[fullPath];
-        }
         const packagePath = 'method.' + fullPath.replace(/\//g, '.');
         if (this.packageNames[packagePath]) {
             return this.packageNames[packagePath];
+        }
+        if (this.packageNames[fullPath]) {
+            return this.packageNames[fullPath];
         }
         return pathPart;
     }
