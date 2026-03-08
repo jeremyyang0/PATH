@@ -105,6 +105,13 @@ export function activate(context: vscode.ExtensionContext): void {
     const pathFileTreeSelectionListener = pathFileTreeView.onDidChangeSelection(event => {
         activePathFileTreeItem = event.selection[0];
     });
+    const activeEditorChangeListener = vscode.window.onDidChangeActiveTextEditor(editor => {
+        if (!editor || editor.document.uri.scheme !== 'file') {
+            return;
+        }
+
+        void revealFileInPathTree(pathFileTreeDataProvider, editor.document.uri.fsPath);
+    });
 
     const refreshEleTree = (): void => {
         eleTreeWebviewProvider.refresh();
@@ -175,7 +182,8 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.registerWebviewViewProvider(EleTreeWebviewProvider.viewType, eleTreeWebviewProvider),
         vscode.window.registerWebviewViewProvider(MethodsTreeWebviewProvider.viewType, methodsTreeWebviewProvider),
         pathFileTreeView,
-        pathFileTreeSelectionListener
+        pathFileTreeSelectionListener,
+        activeEditorChangeListener
     );
 
     const refreshCommand = vscode.commands.registerCommand('eleTreeViewer.refresh', () => {
@@ -294,41 +302,40 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
     const pathFileTreeRevealCommand = vscode.commands.registerCommand('pathFileTree.revealInOS', async (element: TreeItem) => {
-        const targetItem = getPathFileTreeItem(element);
-        if (targetItem?.filePath) {
-            await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(targetItem.filePath));
+        const targetUri = getPathFileTreeUri(element);
+        if (targetUri) {
+            await vscode.commands.executeCommand('revealFileInOS', targetUri);
         }
     });
     const pathFileTreeCopyPathCommand = vscode.commands.registerCommand('pathFileTree.copyPath', async (element: TreeItem) => {
-        const targetItem = getPathFileTreeItem(element);
-        if (targetItem?.filePath) {
-            await vscode.env.clipboard.writeText(targetItem.filePath);
+        const targetUri = getPathFileTreeUri(element);
+        if (targetUri) {
+            await vscode.env.clipboard.writeText(targetUri.fsPath);
         }
     });
     const pathFileTreeCreateCaseCommand = vscode.commands.registerCommand('pathFileTree.createCase', async (element: TreeItem) => {
-        const targetItem = getPathFileTreeItem(element);
-        if (targetItem?.filePath) {
-            await createCase(vscode.Uri.file(targetItem.filePath));
+        const targetUri = getPathFileTreeUri(element);
+        if (targetUri) {
+            await createCase(targetUri);
         }
     });
     const pathFileTreeCopyRelativePathCommand = vscode.commands.registerCommand('pathFileTree.copyRelativePath', async (element: TreeItem) => {
-        const targetItem = getPathFileTreeItem(element);
-        if (!targetItem?.filePath) {
+        const targetUri = getPathFileTreeUri(element);
+        if (!targetUri) {
             return;
         }
-        const targetUri = vscode.Uri.file(targetItem.filePath);
 
         const relativePath = vscode.workspace.asRelativePath(targetUri, false);
-        await vscode.env.clipboard.writeText(relativePath);
+        await vscode.env.clipboard.writeText(relativePath || '.');
     });
     const pathFileTreeFindInFolderCommand = vscode.commands.registerCommand('pathFileTree.findInFolder', async (element: TreeItem) => {
-        const targetItem = getPathFileTreeItem(element);
-        if (!targetItem?.filePath) {
+        const targetUri = getPathFileTreeUri(element);
+        if (!targetUri) {
             return;
         }
-        const targetUri = vscode.Uri.file(targetItem.filePath);
 
-        const searchUri = targetItem.nodeType === 'file'
+        const targetItem = getPathFileTreeItem(element);
+        const searchUri = targetItem?.nodeType === 'file'
             ? vscode.Uri.file(path.dirname(targetUri.fsPath))
             : targetUri;
         const relativePath = vscode.workspace.asRelativePath(searchUri, false);
@@ -561,6 +568,10 @@ export function activate(context: vscode.ExtensionContext): void {
     setTimeout(() => {
         console.log('Initial refresh on plugin activation...');
         refreshAllViews();
+        const activeEditor = vscode.window.activeTextEditor;
+        if (activeEditor && activeEditor.document.uri.scheme === 'file') {
+            void revealFileInPathTree(pathFileTreeDataProvider, activeEditor.document.uri.fsPath);
+        }
     }, 500);
 
     console.log('EasyTest plugin activated');

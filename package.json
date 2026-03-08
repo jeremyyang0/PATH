@@ -87,11 +87,13 @@
       },
       {
         "command": "pathFileTree.newFile",
-        "title": "新建文件..."
+        "title": "新建文件...",
+        "icon": "$(new-file)"
       },
       {
         "command": "pathFileTree.newFolder",
-        "title": "新建文件夹..."
+        "title": "新建文件夹...",
+        "icon": "$(new-folder)"
       },
       {
         "command": "pathFileTree.rename",
@@ -210,7 +212,42 @@
         {
           "command": "pathFileTree.refresh",
           "when": "view == pathFileTree",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "pathFileTree.newFile",
+          "when": "view == pathFileTree",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pathFileTree.newFolder",
+          "when": "view == pathFileTree",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pathFileTree.revealInOS",
+          "when": "view == pathFileTree",
+          "group": "2_root"
+        },
+        {
+          "command": "pathFileTree.copyPath",
+          "when": "view == pathFileTree",
+          "group": "2_root"
+        },
+        {
+          "command": "pathFileTree.copyRelativePath",
+          "when": "view == pathFileTree",
+          "group": "2_root"
+        },
+        {
+          "command": "pathFileTree.findInFolder",
+          "when": "view == pathFileTree",
+          "group": "2_root"
+        },
+        {
+          "command": "pathFileTree.createCase",
+          "when": "view == pathFileTree",
+          "group": "2_root"
         }
       ],
       "view/item/context": [
@@ -306,6 +343,11 @@
         "when": "listFocus && focusedView == 'pathFileTree' && !inputFocus"
       }
     ],
+    "configurationDefaults": {
+      "files.associations": {
+        ".order": "json"
+      }
+    },
     "configuration": {
       "title": "PATH Plugin Settings",
       "properties": {
