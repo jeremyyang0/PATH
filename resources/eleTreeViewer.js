@@ -223,6 +223,14 @@ function showLoading() {
     document.getElementById('treeContainer').innerHTML = '<div class="message-container"><div class="spinner"></div><div>正在加载数据...</div></div>';
 }
 
+function showDebugStatus(text) {
+    console.debug('[EleTree]', text);
+    if (treeData.length > 0) {
+        return;
+    }
+    document.getElementById('treeContainer').innerHTML = `<div class="message-container"><div>${escapeHtml(text)}</div></div>`;
+}
+
 function updateTreeData(data) {
     treeData = data;
     filteredData = data;
@@ -532,6 +540,9 @@ window.addEventListener('message', event => {
             restoreState();
             renderTree();
             break;
+        case 'debugStatus':
+            showDebugStatus(message.text);
+            break;
     }
 });
 
@@ -545,4 +556,8 @@ document.addEventListener('DOMContentLoaded', () => {
     new DragDropManager();
     restoreState();
     updateToggleBtnState();
+    showDebugStatus('Ele Tree 前端已启动，等待扩展数据...');
+    if (vscode) {
+        vscode.postMessage({ command: 'ready' });
+    }
 });

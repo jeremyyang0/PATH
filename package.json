@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python 自动化测试辅助插件，提供元素树、方法树、PATH 文件树和 AI 代码生成功能",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -15,7 +15,8 @@
     "onLanguage:python",
     "onCommand:eleTreeViewer.refresh",
     "onCommand:methodsViewer.refresh",
-    "onCommand:pathFileTree.refresh"
+    "onCommand:pathFileTree.refresh",
+    "onCommand:pathSniffViewer.refresh"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -30,6 +31,18 @@
           "id": "eleSecondaryViewContainer",
           "title": "PATH",
           "icon": "resources/icons/secondary-view.svg"
+        },
+        {
+          "id": "pathSniffViewerContainer",
+          "title": "PATH Sniff",
+          "icon": "resources/icons/sniff-tree.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "pathSniffPanelContainer",
+          "title": "PATH Sniff",
+          "icon": "resources/icons/sniff-tree.svg"
         }
       ]
     },
@@ -52,7 +65,33 @@
         {
           "id": "pathFileTree",
           "name": "PATH 文件树",
-          "when": "true"
+          "when": "true",
+          "icon": "resources/icons/file-tree.svg"
+        }
+      ],
+      "pathSniffViewerContainer": [
+        {
+          "id": "pathSniffViewer",
+          "name": "Sniff",
+          "type": "webview",
+          "when": "true",
+          "icon": "resources/icons/sniff-tree.svg"
+        }
+      ],
+      "pathSniffPanelContainer": [
+        {
+          "id": "pathSniffOverviewViewer",
+          "name": "Sniff Overview",
+          "type": "webview",
+          "when": "true",
+          "icon": "resources/icons/sniff-overview.svg"
+        },
+        {
+          "id": "pathSniffLogsViewer",
+          "name": "Sniff Logs",
+          "type": "webview",
+          "when": "true",
+          "icon": "resources/icons/sniff-logs.svg"
         }
       ],
       "eleSecondaryViewContainer": [
@@ -78,6 +117,11 @@
       },
       {
         "command": "pathFileTree.refresh",
+        "title": "刷新",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pathSniffViewer.refresh",
         "title": "刷新",
         "icon": "$(refresh)"
       },
@@ -213,6 +257,11 @@
           "command": "pathFileTree.refresh",
           "when": "view == pathFileTree",
           "group": "navigation@1"
+        },
+        {
+          "command": "pathSniffViewer.refresh",
+          "when": "view == pathSniffViewer",
+          "group": "navigation"
         },
         {
           "command": "pathFileTree.newFile",

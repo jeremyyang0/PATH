@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sniff Overview</title>
+    <style>
+        :root {
+            --bg: var(--vscode-panel-background);
+            --surface: color-mix(in srgb, var(--vscode-editor-background) 96%, transparent);
+            --surface-strong: color-mix(in srgb, var(--vscode-editorWidget-background) 88%, transparent);
+            --border: color-mix(in srgb, var(--vscode-panel-border) 78%, transparent);
+            --muted: var(--vscode-descriptionForeground);
+            --accent: var(--vscode-button-background);
+            --accent-fg: var(--vscode-button-foreground);
+            --radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 6px 8px 8px;
+            height: 100vh;
+            font: 12px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: var(--vscode-foreground);
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        .app {
+            height: 100%;
+            display: grid;
+            grid-template-columns: minmax(280px, 0.92fr) minmax(320px, 1.08fr);
+            gap: 6px;
+        }
+
+        .pane {
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .pane-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-strong);
+            font-weight: 700;
+        }
+
+        .pane-title {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .pane-meta {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 400;
+            white-space: nowrap;
+        }
+
+        .pane-body {
+            min-height: 0;
+            overflow: auto;
+        }
+
+        .button {
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            background: var(--accent);
+            color: var(--accent-fg);
+            font: inherit;
+            font-weight: 700;
+        }
+
+        .empty,
+        .json-box {
+            margin: 0;
+            padding: 8px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .empty {
+            color: var(--muted);
+        }
+
+        .json-box {
+            font: 11px/1.45 Consolas, "Courier New", monospace;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        td {
+            padding: 5px 8px;
+            border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+            vertical-align: top;
+            word-break: break-word;
+        }
+
+        td:first-child {
+            width: 34%;
+            color: var(--muted);
+        }
+
+        @media (max-width: 680px) {
+            .app {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <section class="pane">
+            <div class="pane-header">属性</div>
+            <div id="propertiesContainer" class="pane-body"></div>
+        </section>
+
+        <section class="pane">
+            <div class="pane-header">
+                <div class="pane-title">
+                    <span>Widget Definition</span>
+                    <span id="widgetDefMeta" class="pane-meta"></span>
+                </div>
+                <button id="copyWidgetDefButton" class="button" type="button">复制</button>
+            </div>
+            <div id="widgetDefContainer" class="pane-body"></div>
+        </section>
+    </div>
+
+    <script src="sniffOverviewViewer.js"></script>
+</body>
+</html>

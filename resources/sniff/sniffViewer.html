@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sniff Tree</title>
+    <style>
+        :root {
+            --bg-panel: color-mix(in srgb, var(--vscode-sideBar-background) 88%, transparent);
+            --bg-surface: var(--vscode-editor-background);
+            --bg-elevated: color-mix(in srgb, var(--vscode-editorWidget-background) 92%, transparent);
+            --border: color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
+            --accent: var(--vscode-button-background);
+            --accent-strong: var(--vscode-textLink-foreground);
+            --muted: var(--vscode-descriptionForeground);
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+            --radius: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 12px;
+            height: 100vh;
+            font: 13px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: var(--vscode-foreground);
+            background:
+                radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 14%, transparent), transparent 34%),
+                linear-gradient(180deg, color-mix(in srgb, var(--vscode-editor-background) 96%, black 4%), var(--vscode-editor-background));
+            overflow: hidden;
+        }
+
+        .app {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 12px;
+            height: 100%;
+        }
+
+        .toolbar,
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-elevated);
+            box-shadow: var(--shadow);
+        }
+
+        .toolbar {
+            padding: 10px;
+        }
+
+        .server-config {
+            display: grid;
+            gap: 8px;
+        }
+
+        .server-input-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .field-label,
+        .status-text,
+        .meta {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+
+        .input {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: var(--bg-surface);
+            color: inherit;
+            outline: none;
+        }
+
+        .input:focus {
+            border-color: var(--accent);
+        }
+
+        .button {
+            border: none;
+            border-radius: 10px;
+            padding: 8px 12px;
+            cursor: pointer;
+            background: var(--accent);
+            color: var(--vscode-button-foreground);
+            font-weight: 600;
+        }
+
+        .button.secondary {
+            background: color-mix(in srgb, var(--vscode-button-secondaryBackground) 92%, transparent);
+            color: var(--vscode-button-secondaryForeground);
+        }
+
+        .icon-button {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+            border-radius: 10px;
+            cursor: pointer;
+            background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+            color: inherit;
+            transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+        }
+
+        .icon-button:hover {
+            background: color-mix(in srgb, var(--accent) 16%, transparent);
+            border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+            transform: translateY(-1px);
+        }
+
+        .icon-button svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+        }
+
+        .panel {
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 700;
+        }
+
+        .panel-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .panel-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-content {
+            min-height: 0;
+            overflow: auto;
+        }
+
+        .tree-item {
+            display: grid;
+            grid-template-columns: auto auto 1fr;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 10px;
+            margin: 2px 6px;
+            cursor: pointer;
+        }
+
+        .tree-item:hover {
+            background: color-mix(in srgb, var(--accent) 12%, transparent);
+        }
+
+        .tree-item.selected {
+            background: color-mix(in srgb, var(--accent) 20%, transparent);
+            color: var(--accent-strong);
+        }
+
+        .indent {
+            width: 14px;
+            flex-shrink: 0;
+        }
+
+        .twisty {
+            width: 14px;
+            color: var(--muted);
+            user-select: none;
+            text-align: center;
+        }
+
+        .tree-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .empty {
+            padding: 20px 12px;
+            color: var(--muted);
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.42);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-backdrop.visible {
+            display: flex;
+        }
+
+        .modal {
+            width: min(680px, calc(100vw - 32px));
+            max-height: min(520px, calc(100vh - 32px));
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--bg-elevated);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+        }
+
+        .modal-title {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 700;
+        }
+
+        .search-panel {
+            display: grid;
+            gap: 8px;
+            padding: 12px 16px;
+            border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+        }
+
+        .search-input {
+            min-height: 108px;
+            resize: vertical;
+            font: 12px/1.5 Consolas, "Courier New", monospace;
+        }
+
+        .modal-body {
+            overflow: auto;
+        }
+
+        .result-row {
+            padding: 10px 16px;
+            border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+            cursor: pointer;
+        }
+
+        .result-row:hover {
+            background: color-mix(in srgb, var(--accent) 12%, transparent);
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .context-menu {
+            position: fixed;
+            display: none;
+            z-index: 1200;
+            min-width: 160px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-elevated);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .context-menu.visible {
+            display: block;
+        }
+
+        .context-item {
+            padding: 10px 12px;
+            cursor: pointer;
+        }
+
+        .context-item:hover {
+            background: color-mix(in srgb, var(--accent) 14%, transparent);
+        }
+
+        .json-box {
+            margin: 0;
+            padding: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font: 12px/1.5 Consolas, "Courier New", monospace;
+        }
+
+        @media (max-width: 820px) {
+            .server-input-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="toolbar">
+            <div class="server-config">
+                <span class="field-label">server_name</span>
+                <div class="server-input-row">
+                    <input id="serverNameInput" class="input" value="common" placeholder="common" />
+                    <button id="applyServerButton" class="button secondary">应用</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span>控件树</span>
+                    <span id="treeMeta" class="field-label">0 nodes</span>
+                </div>
+                <div class="panel-actions">
+                    <button id="findButton" class="icon-button" type="button" title="查找" aria-label="查找">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="M20 20L16.65 16.65"></path>
+                        </svg>
+                    </button>
+                    <button id="refreshButton" class="icon-button" type="button" title="刷新" aria-label="刷新">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+                            <path d="M21 3v6h-6"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="treeContainer" class="panel-content"></div>
+        </section>
+    </div>
+
+    <div id="searchModal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-title">查找控件</div>
+            <div class="search-panel">
+                <span class="field-label">widget_def JSON</span>
+                <textarea id="searchWidgetDefInput" class="input search-input" placeholder='{"type":"QPushButton","text":"OK"}'></textarea>
+            </div>
+            <div id="searchResultsBody" class="modal-body"></div>
+            <div class="modal-footer">
+                <button id="closeSearchModalButton" class="button secondary">关闭</button>
+                <button id="submitSearchButton" class="button">搜索</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="errorModal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-title">错误详情</div>
+            <div id="errorBody" class="modal-body"></div>
+            <div class="modal-footer">
+                <button id="copyErrorButton" class="button secondary">复制错误</button>
+                <button id="closeErrorModalButton" class="button">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="contextMenu" class="context-menu">
+        <div data-action="view" class="context-item">查看属性</div>
+        <div data-action="highlight" class="context-item">高亮闪烁</div>
+        <div data-action="generate" class="context-item">生成 widget_def</div>
+    </div>
+
+    <script src="sniffViewer.js"></script>
+</body>
+</html>
