@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { shouldIgnorePythonTreeDirectory } from '../path/workspacePathUtils';
 
 export interface ParseResult {
     results: FileResult[];
@@ -118,6 +119,10 @@ export class PythonIndexService {
             for (const item of items) {
                 const fullPath = path.join(dir, item.name);
                 if (item.isDirectory()) {
+                    if (shouldIgnorePythonTreeDirectory(item.name)) {
+                        continue;
+                    }
+
                     const initFile = path.join(fullPath, '__init__.py');
                     if (fs.existsSync(initFile)) {
                         const relativePath = path.relative(methodDir, fullPath);
@@ -403,6 +408,10 @@ export class PythonIndexService {
             for (const item of items) {
                 const fullPath = path.join(dir, item.name);
                 if (item.isDirectory()) {
+                    if (shouldIgnorePythonTreeDirectory(item.name)) {
+                        continue;
+                    }
+
                     walkDir(fullPath);
                 } else if (item.name.endsWith('.py')) {
                     pythonFiles.push(fullPath);

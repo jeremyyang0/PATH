@@ -7,6 +7,8 @@ let errorText = '';
 let contextTargetWidgetId = '';
 let activeServerName = 'common';
 let lastTreeClick = { widgetId: '', time: 0 };
+let autoRefreshEnabled = false;
+let autoRefreshIntervalSeconds = 5;
 
 const elements = {
     treeContainer: document.getElementById('treeContainer'),
@@ -15,6 +17,8 @@ const elements = {
     statusIndicator: document.getElementById('statusIndicator'),
     serverNameInput: document.getElementById('serverNameInput'),
     applyServerButton: document.getElementById('applyServerButton'),
+    autoRefreshToggle: document.getElementById('autoRefreshToggle'),
+    autoRefreshIntervalInput: document.getElementById('autoRefreshIntervalInput'),
     refreshButton: document.getElementById('refreshButton'),
     findButton: document.getElementById('findButton'),
     searchModal: document.getElementById('searchModal'),
@@ -59,7 +63,9 @@ function saveState() {
         expandedWidgetIds: Array.from(expandedWidgetIds),
         selectedWidgetId,
         searchWidgetDefInput: elements.searchWidgetDefInput.value,
-        serverNameInput: elements.serverNameInput.value
+        serverNameInput: elements.serverNameInput.value,
+        autoRefreshEnabled,
+        autoRefreshIntervalSeconds
     });
 }
 
@@ -79,6 +85,14 @@ function restoreState() {
 
     if (typeof state.serverNameInput === 'string' && state.serverNameInput.trim()) {
         elements.serverNameInput.value = state.serverNameInput;
+    }
+
+    if (typeof state.autoRefreshEnabled === 'boolean') {
+        autoRefreshEnabled = state.autoRefreshEnabled;
+    }
+
+    if (Number.isFinite(state.autoRefreshIntervalSeconds)) {
+        autoRefreshIntervalSeconds = normalizeAutoRefreshInterval(state.autoRefreshIntervalSeconds);
     }
 }
 
@@ -152,9 +166,10 @@ function renderTreeNode(node, level) {
     const childrenHtml = hasChildren && isExpanded
         ? node.children.map(child => renderTreeNode(child, level + 1)).join('')
         : '';
+    const chevronSvg = '<svg class="icon-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06z"/></svg>';
     const twisty = hasChildren
-        ? (isExpanded ? '&#9662;' : '&#9656;')
-        : '&#8226;';
+        ? `<span class="twisty ${isExpanded ? 'expanded' : ''}">${chevronSvg}</span>`
+        : '<span class="twisty leaf"><span class="icon-dot"></span></span>';
 
     return `
         <div>
@@ -166,7 +181,7 @@ function renderTreeNode(node, level) {
                 style="padding-left:${8 + level * 18}px"
             >
                 <span class="indent"></span>
-                <span class="twisty">${twisty}</span>
+                ${twisty}
                 <span class="tree-label">${escapeHtml(getNodeLabel(node))}</span>
             </div>
             ${childrenHtml}
@@ -176,6 +191,35 @@ function renderTreeNode(node, level) {
 
 function getRequestedServerName() {
     return (elements.serverNameInput.value || '').trim() || 'common';
+}
+
+function normalizeAutoRefreshInterval(value) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+        return 5;
+    }
+
+    return Math.max(1, Math.min(3600, Math.floor(numericValue)));
+}
+
+function syncAutoRefreshControls() {
+    if (elements.autoRefreshToggle) {
+        elements.autoRefreshToggle.checked = autoRefreshEnabled;
+    }
+
+    if (elements.autoRefreshIntervalInput) {
+        elements.autoRefreshIntervalInput.value = String(autoRefreshIntervalSeconds);
+    }
+}
+
+function applyAutoRefreshSettings() {
+    syncAutoRefreshControls();
+    saveState();
+    postToExtensionHost({
+        command: 'setAutoRefresh',
+        enabled: autoRefreshEnabled,
+        intervalSeconds: autoRefreshIntervalSeconds
+    });
 }
 
 function applyServerName() {
@@ -315,6 +359,16 @@ elements.applyServerButton.addEventListener('click', () => {
     applyServerName();
 });
 
+elements.autoRefreshToggle.addEventListener('change', event => {
+    autoRefreshEnabled = Boolean(event.target.checked);
+    applyAutoRefreshSettings();
+});
+
+elements.autoRefreshIntervalInput.addEventListener('change', event => {
+    autoRefreshIntervalSeconds = normalizeAutoRefreshInterval(event.target.value);
+    applyAutoRefreshSettings();
+});
+
 elements.serverNameInput.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
         applyServerName();
@@ -376,7 +430,7 @@ elements.treeContainer.addEventListener('click', event => {
     }
 
     const hasChildren = item.getAttribute('data-has-children') === '1';
-    if (hasChildren && event.target.classList.contains('twisty')) {
+    if (hasChildren && event.target.closest('.twisty')) {
         if (expandedWidgetIds.has(widgetId)) {
             expandedWidgetIds.delete(widgetId);
         } else {
@@ -515,6 +569,12 @@ window.addEventListener('message', event => {
         case 'highlightCompleted':
             setStatus(`已高亮控件 ${String(message.widgetId || '')}`);
             break;
+        case 'setAutoRefreshState':
+            autoRefreshEnabled = Boolean(message.enabled);
+            autoRefreshIntervalSeconds = normalizeAutoRefreshInterval(message.intervalSeconds);
+            syncAutoRefreshControls();
+            saveState();
+            break;
         case 'setSearchResults':
             showSearchResults(message.results || []);
             break;
@@ -525,11 +585,14 @@ window.addEventListener('message', event => {
 });
 
 restoreState();
+syncAutoRefreshControls();
 renderTree();
 renderSearchHint('输入 widget_def JSON 后开始搜索');
 setStatus(vscode ? '等待连接' : 'bridge 不可用');
 setSelectionMeta('未选择控件');
 postToExtensionHost({
     command: 'ready',
-    serverName: getRequestedServerName()
+    serverName: getRequestedServerName(),
+    autoRefreshEnabled,
+    autoRefreshIntervalSeconds
 });

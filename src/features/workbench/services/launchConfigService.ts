@@ -192,7 +192,7 @@ export async function checkAndAddLaunchConfig() {
             "type": "debugpy",
             "request": "launch",
             "module": "markrunner.cli",
-            "args": ["run", "-w", "${workspaceFolder}", "-p", "${relativeFile}", "--no-report", "--reruns", "0"],
+            "args": ["run", "-w", "${workspaceFolder}", "-p", "${relativeFile}", "--no-report", "--reruns", "0", "--ignore-job-start"],
             "console": "integratedTerminal"
         };
 

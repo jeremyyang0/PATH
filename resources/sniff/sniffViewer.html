@@ -49,19 +49,59 @@
         }
 
         .toolbar {
-            padding: 10px;
+            padding: 8px 10px;
         }
 
-        .server-config {
+        .toolbar-row {
             display: grid;
-            gap: 8px;
-        }
-
-        .server-input-row {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 8px;
+            grid-template-columns: auto minmax(120px, 1fr) auto auto 56px auto;
             align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .toolbar-label {
+            color: var(--muted);
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        .compact-input {
+            width: auto;
+            min-width: 0;
+            padding: 5px 8px;
+            border-radius: 7px;
+        }
+
+        .compact-number-input {
+            width: 56px;
+            min-width: 56px;
+            padding: 5px 6px;
+            border-radius: 7px;
+        }
+
+        .compact-button {
+            padding: 5px 10px;
+            border-radius: 7px;
+        }
+
+        .inline-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .toggle {
+            width: 14px;
+            height: 14px;
+            accent-color: var(--accent);
+        }
+
+        .toolbar-unit {
+            color: var(--muted);
+            font-size: 11px;
         }
 
         .field-label,
@@ -189,10 +229,44 @@
         }
 
         .twisty {
-            width: 14px;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             color: var(--muted);
+            opacity: 0.72;
             user-select: none;
-            text-align: center;
+            flex-shrink: 0;
+            transition: transform 120ms ease, opacity 120ms ease, color 120ms ease;
+        }
+
+        .twisty:hover {
+            opacity: 1;
+        }
+
+        .tree-item.selected .twisty {
+            color: var(--accent-strong);
+            opacity: 1;
+        }
+
+        .icon-chevron {
+            width: 12px;
+            height: 12px;
+            fill: currentColor;
+            transition: transform 120ms ease;
+        }
+
+        .twisty.expanded .icon-chevron {
+            transform: rotate(90deg);
+        }
+
+        .icon-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.88;
         }
 
         .tree-label {
@@ -307,8 +381,9 @@
         }
 
         @media (max-width: 820px) {
-            .server-input-row {
-                grid-template-columns: 1fr;
+            .toolbar-row {
+                grid-template-columns: auto minmax(96px, 1fr) auto auto 52px auto;
+                gap: 5px;
             }
         }
     </style>
@@ -316,12 +391,15 @@
 <body>
     <div class="app">
         <div class="toolbar">
-            <div class="server-config">
-                <span class="field-label">server_name</span>
-                <div class="server-input-row">
-                    <input id="serverNameInput" class="input" value="common" placeholder="common" />
-                    <button id="applyServerButton" class="button secondary">应用</button>
-                </div>
+            <div class="toolbar-row">
+                <span class="toolbar-label">server</span>
+                <input id="serverNameInput" class="input compact-input" value="common" placeholder="common" />
+                <button id="applyServerButton" class="button secondary compact-button">应用</button>
+                <label class="inline-toggle">
+                    <input id="autoRefreshToggle" class="toggle" type="checkbox" />
+                    <span class="toolbar-label">自动刷新</span>
+                </label>
+                <input id="autoRefreshIntervalInput" class="input compact-number-input" type="number" min="1" step="1" value="5" />
             </div>
         </div>
 

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import * as vscode from 'vscode';
 import { StructuredError } from '../../../shared/errors/structuredError';
 import { LocalSocketTransport } from '../../../shared/ipc/localSocketTransport';
 
@@ -46,24 +47,45 @@ function throwIfError(response: { error?: string; error_type?: string; traceback
 }
 
 export class SniffClient {
+    private static readonly defaultRequestTimeoutMs = 5000;
     private readonly transport = new LocalSocketTransport();
 
     public constructor(private readonly serverName: string) {}
 
     private getRoutePath(route: string): string {
-        // widgetscout 的原始 client/server 都使用带前导斜杠的 route，
-        // 最终协议路径是 /<server_name>//<route>，这里保持兼容。
-        return `/${route}`;
+        return route.trim().replace(/^\/+/, '');
+    }
+
+    private getRequestOptions(): { timeoutMs: number } {
+        const configuredTimeout = vscode.workspace
+            .getConfiguration('path.sniff')
+            .get<number>('clientRequestTimeoutMs', SniffClient.defaultRequestTimeoutMs);
+
+        if (!Number.isFinite(configuredTimeout) || configuredTimeout <= 0) {
+            return { timeoutMs: SniffClient.defaultRequestTimeoutMs };
+        }
+
+        return { timeoutMs: Math.floor(configuredTimeout) };
     }
 
     public async getWidgetTree(): Promise<SniffTreeResponse> {
-        const response = await this.transport.post<SniffTreeResponse>(this.serverName, this.getRoutePath('get_widget_tree'));
+        const response = await this.transport.post<SniffTreeResponse>(
+            this.serverName,
+            this.getRoutePath('get_widget_tree'),
+            undefined,
+            this.getRequestOptions()
+        );
         throwIfError(response);
         return response;
     }
 
     public async refreshWidgetTree(): Promise<SniffTreeResponse> {
-        const response = await this.transport.post<SniffTreeResponse>(this.serverName, this.getRoutePath('refresh_widget_tree'));
+        const response = await this.transport.post<SniffTreeResponse>(
+            this.serverName,
+            this.getRoutePath('refresh_widget_tree'),
+            undefined,
+            this.getRequestOptions()
+        );
         throwIfError(response);
         return response;
     }
@@ -71,7 +93,7 @@ export class SniffClient {
     public async getWidgetInfo(widgetId: string): Promise<SniffInfoResponse> {
         const response = await this.transport.post<SniffInfoResponse>(this.serverName, this.getRoutePath('get_widget_info'), {
             widget_id: widgetId
-        });
+        }, this.getRequestOptions());
         throwIfError(response);
         return response;
     }
@@ -80,7 +102,8 @@ export class SniffClient {
         const response = await this.transport.post<{ success?: boolean; error?: string; error_type?: string; traceback?: string }>(
             this.serverName,
             this.getRoutePath('highlight_widget'),
-            { widget_id: widgetId }
+            { widget_id: widgetId },
+            this.getRequestOptions()
         );
         throwIfError(response);
     }
@@ -89,7 +112,8 @@ export class SniffClient {
         const response = await this.transport.post<SniffSearchResponse | { error?: string; error_type?: string; traceback?: string }>(
             this.serverName,
             this.getRoutePath('search_widget'),
-            { widget_def: widgetDef }
+            { widget_def: widgetDef },
+            this.getRequestOptions()
         );
 
         if (!Array.isArray(response)) {
@@ -103,7 +127,7 @@ export class SniffClient {
     public async generateWidgetDef(widgetId: string): Promise<SniffWidgetDefResponse> {
         const response = await this.transport.post<SniffWidgetDefResponse>(this.serverName, this.getRoutePath('generate_widget_def'), {
             widget_id: widgetId
-        });
+        }, this.getRequestOptions());
         throwIfError(response);
         return response;
     }

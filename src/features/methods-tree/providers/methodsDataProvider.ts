@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { type MethodInfo, type MethodResult, PythonIndexService } from '../../../shared/indexing/pythonIndexService';
 import { orderItemsByDirectoryFile } from '../../../shared/path/orderUtils';
 import { DragAndDropController } from '../../../shared/tree/dragAndDropController';
-import { ORDER_FILE_NAME } from '../../../shared/path/workspacePathUtils';
+import { ORDER_FILE_NAME, shouldIgnorePythonTreeDirectory } from '../../../shared/path/workspacePathUtils';
 import { TreeItem } from '../../../shared/tree/treeItem';
 
 export class MethodsDataProvider implements vscode.TreeDataProvider<TreeItem> {
@@ -104,6 +104,10 @@ export class MethodsDataProvider implements vscode.TreeDataProvider<TreeItem> {
         const entries = fs.readdirSync(directoryPath, { withFileTypes: true });
         const relevantEntries = entries.filter(entry => {
             if (entry.name === ORDER_FILE_NAME) {
+                return false;
+            }
+
+            if (entry.isDirectory() && shouldIgnorePythonTreeDirectory(entry.name)) {
                 return false;
             }
 

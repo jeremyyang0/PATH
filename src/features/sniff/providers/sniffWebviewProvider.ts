@@ -7,6 +7,7 @@ import { SniffViewStateStore } from '../services/sniffViewStateStore';
 
 export class SniffWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'pathSniffViewer';
+    private static readonly defaultAutoRefreshIntervalSeconds = 5;
 
     private static readonly outputChannel = vscode.window.createOutputChannel('PATH Sniff');
 
@@ -14,6 +15,11 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
     private currentServerName = 'common';
     private service = new SniffService(this.currentServerName);
     private hasReceivedReady = false;
+    private hasInitializedAutoRefresh = false;
+    private autoRefreshEnabled = false;
+    private autoRefreshIntervalSeconds = SniffWebviewProvider.defaultAutoRefreshIntervalSeconds;
+    private autoRefreshTimer?: NodeJS.Timeout;
+    private refreshInProgress = false;
 
     public constructor(
         private readonly extensionUri: vscode.Uri,
@@ -40,11 +46,19 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
             switch (data.command) {
                 case 'ready':
                     this.hasReceivedReady = true;
+                    if (!this.hasInitializedAutoRefresh) {
+                        this.updateAutoRefreshState(Boolean(data.autoRefreshEnabled), Number(data.autoRefreshIntervalSeconds || 0));
+                    }
                     this.pushTreeState();
+                    this.pushAutoRefreshState();
                     void this.refresh(String(data.serverName || this.currentServerName), false);
                     break;
                 case 'refresh':
                     void this.refresh(String(data.serverName || this.currentServerName), false);
+                    break;
+                case 'setAutoRefresh':
+                    this.updateAutoRefreshState(Boolean(data.enabled), Number(data.intervalSeconds || 0));
+                    this.pushAutoRefreshState();
                     break;
                 case 'setServerName':
                     void this.refresh(String(data.serverName || this.currentServerName), true);
@@ -82,6 +96,12 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     public refresh(serverName = this.currentServerName, resetState = false): Promise<void> {
+        if (this.refreshInProgress) {
+            this.log(`Skip refresh because another refresh is running. serverName=${this.currentServerName}`);
+            return Promise.resolve();
+        }
+
+        this.refreshInProgress = true;
         return this.run(async () => {
             const serverChanged = this.updateServerName(serverName);
             this.stateStore.setStatus(`正在连接 ${this.currentServerName} 并刷新控件树...`);
@@ -119,6 +139,24 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
                 serverName: this.currentServerName,
                 resetState: resetState && serverChanged
             });
+        }).finally(() => {
+            this.refreshInProgress = false;
+        });
+    }
+
+    public toggleAutoRefresh(): void {
+        this.updateAutoRefreshState(!this.autoRefreshEnabled, this.autoRefreshIntervalSeconds);
+        this.pushAutoRefreshState();
+        this.stateStore.setStatus(
+            this.autoRefreshEnabled
+                ? `已开启自动刷新 (${this.autoRefreshIntervalSeconds}s)`
+                : '已关闭自动刷新'
+        );
+        this.postMessage({
+            command: 'setStatus',
+            text: this.autoRefreshEnabled
+                ? `已开启自动刷新 (${this.autoRefreshIntervalSeconds}s)`
+                : '已关闭自动刷新'
         });
     }
 
@@ -207,6 +245,14 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
         });
     }
 
+    private pushAutoRefreshState(): void {
+        this.postMessage({
+            command: 'setAutoRefreshState',
+            enabled: this.autoRefreshEnabled,
+            intervalSeconds: this.autoRefreshIntervalSeconds
+        });
+    }
+
     private postMessage(message: Record<string, unknown>): void {
         if (this.view) {
             void this.view.webview.postMessage(message);
@@ -225,6 +271,44 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
         this.stateStore.setServerName(this.currentServerName);
         this.stateStore.clearSelection();
         return true;
+    }
+
+    private updateAutoRefreshState(enabled: boolean, intervalSeconds: number): void {
+        this.hasInitializedAutoRefresh = true;
+        this.autoRefreshEnabled = enabled;
+        this.autoRefreshIntervalSeconds = this.normalizeAutoRefreshInterval(intervalSeconds);
+        this.resetAutoRefreshTimer();
+        this.log(
+            `Auto refresh ${this.autoRefreshEnabled ? 'enabled' : 'disabled'}. ` +
+            `intervalSeconds=${this.autoRefreshIntervalSeconds}`
+        );
+    }
+
+    private normalizeAutoRefreshInterval(intervalSeconds: number): number {
+        if (!Number.isFinite(intervalSeconds)) {
+            return SniffWebviewProvider.defaultAutoRefreshIntervalSeconds;
+        }
+
+        return Math.max(1, Math.min(3600, Math.floor(intervalSeconds)));
+    }
+
+    private resetAutoRefreshTimer(): void {
+        if (this.autoRefreshTimer) {
+            clearInterval(this.autoRefreshTimer);
+            this.autoRefreshTimer = undefined;
+        }
+
+        if (!this.autoRefreshEnabled) {
+            return;
+        }
+
+        this.autoRefreshTimer = setInterval(() => {
+            if (!this.view?.visible) {
+                return;
+            }
+
+            void this.refresh(this.currentServerName, false);
+        }, this.autoRefreshIntervalSeconds * 1000);
     }
 
     private containsWidget(tree: SniffWidgetTreeNode[], widgetId: string): boolean {

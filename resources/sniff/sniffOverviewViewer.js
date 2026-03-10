@@ -51,7 +51,11 @@ elements.copyWidgetDefButton.addEventListener('click', async () => {
         return;
     }
 
-    await navigator.clipboard.writeText(widgetDefText);
+    if (!vscode || typeof vscode.postMessage !== 'function') {
+        return;
+    }
+
+    vscode.postMessage({ command: 'copyWidgetDefTemplate' });
 });
 
 window.addEventListener('message', event => {

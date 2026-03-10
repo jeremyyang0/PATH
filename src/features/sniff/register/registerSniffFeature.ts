@@ -22,6 +22,9 @@ export function registerSniffFeature(context: vscode.ExtensionContext): SniffFea
         }),
         vscode.commands.registerCommand('pathSniffViewer.refresh', async () => {
             await provider.refresh();
+        }),
+        vscode.commands.registerCommand('pathSniffViewer.toggleAutoRefresh', () => {
+            provider.toggleAutoRefresh();
         })
     );
 

@@ -233,8 +233,9 @@ export function parseStepsFromFile(content: string, options: ParseStepOptions = 
         const step = steps[i]!;
         const nextStep = steps[i + 1];
 
-        // 搜索范围：从当前步骤(或预期)结束后，到下一个步骤开始前(或文件末尾)
-        const startScan = (step.expectLine !== undefined ? step.expectLine : step.line) + 1;
+        // 搜索范围：从当前步骤注释后，到下一个步骤开始前(或文件末尾)
+        // 这样既能识别插入在步骤注释下方的动作代码，也能识别插入在预期注释下方的断言代码
+        const startScan = step.line + 1;
         const endScan = nextStep ? nextStep.line : lines.length;
 
         let hasCode = false;
@@ -956,27 +957,23 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
                 assertCalls = assertResult.calls;
             }
 
-            // 确定插入位置（步骤和预期注释之后）
-            // 注意：由于前面的插入导致行号变化，需要加上 lineOffset
-            const baseLine = step.expectLine !== undefined ? step.expectLine : step.line;
-            const insertLine = baseLine + 1 + lineOffset;
-
             // 获取缩进（使用偏移后的行号获取当前内容）
             const currentStepLine = step.line + lineOffset;
             let indent = '        ';
-            if (currentStepLine < document.lineCount) {
-                const stepLineText = document.lineAt(currentStepLine).text;
+            if (currentStepLine < editor.document.lineCount) {
+                const stepLineText = editor.document.lineAt(currentStepLine).text;
                 const indentMatch = stepLineText.match(/^(\s*)/);
                 indent = (indentMatch && indentMatch[1]) ? indentMatch[1] : '        ';
             }
 
             // 构建插入内容和报告
-            let codeLines: string[] = [];
+            let actionCodeLines: string[] = [];
+            let assertCodeLines: string[] = [];
 
             // Action 结果处理
             if (actionCalls.length > 0) {
                 const lines = actionCalls.map(c => `${indent}${formatCall(c)}`); // 生成带参数的调用
-                codeLines.push(...lines);
+                actionCodeLines.push(...lines);
 
                 // 报告中使用简单的路径展示，还是带参数？带参数更好
                 const callDescriptions = actionCalls.map(c => formatCall(c)).join('\n');
@@ -989,7 +986,7 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
                 });
                 stepsHistory.push(`${stepLabel} (Code: ${actionCalls.map(c => c.path).join(', ')})`);
             } else {
-                codeLines.push(`${indent}# TODO: ${step.desc}`);
+                actionCodeLines.push(`${indent}# TODO: ${step.desc}`);
                 report.push({
                     step: stepLabel,
                     result: 'Failed',
@@ -1003,7 +1000,7 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
             if (!isPrecondition && step.expect) {
                 if (assertCalls.length > 0) {
                     const lines = assertCalls.map(c => `${indent}${formatCall(c)}`);
-                    codeLines.push(...lines);
+                    assertCodeLines.push(...lines);
 
                     const callDescriptions = assertCalls.map(c => formatCall(c)).join('\n');
 
@@ -1014,7 +1011,7 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
                         conversationLogs: logConversation ? assertResult.conversationLogs : undefined
                     });
                 } else {
-                    codeLines.push(`${indent}# TODO: 验证 ${step.expect}`);
+                    assertCodeLines.push(`${indent}# TODO: 验证 ${step.expect}`);
                     report.push({
                         step: `验证: ${step.expect}`,
                         result: 'Failed',
@@ -1024,18 +1021,33 @@ export async function processFileWithAI(document: vscode.TextDocument): Promise<
                 }
             }
 
-            const insertText = codeLines.join('\n') + '\n';
+            const actionInsertText = actionCodeLines.length > 0 ? actionCodeLines.join('\n') + '\n' : '';
+            const assertInsertText = assertCodeLines.length > 0 ? assertCodeLines.join('\n') + '\n' : '';
+            let currentStepOffset = 0;
 
-            // 插入代码
-            await editor.edit(editBuilder => {
-                const position = new vscode.Position(insertLine, 0);
-                editBuilder.insert(position, insertText);
-            });
+            if (actionInsertText) {
+                const actionInsertLine = step.line + 1 + lineOffset;
+                await editor.edit(editBuilder => {
+                    const position = new vscode.Position(actionInsertLine, 0);
+                    editBuilder.insert(position, actionInsertText);
+                });
 
-            // 更新行号偏移
-            // split('\n').length - 1 是因为最后有一个换行符
-            const insertedLinesCount = insertText.split('\n').length - 1;
-            lineOffset += insertedLinesCount;
+                const insertedActionLinesCount = actionInsertText.split('\n').length - 1;
+                currentStepOffset += insertedActionLinesCount;
+            }
+
+            if (!isPrecondition && step.expectLine !== undefined && assertInsertText) {
+                const assertInsertLine = step.expectLine + 1 + lineOffset + currentStepOffset;
+                await editor.edit(editBuilder => {
+                    const position = new vscode.Position(assertInsertLine, 0);
+                    editBuilder.insert(position, assertInsertText);
+                });
+
+                const insertedAssertLinesCount = assertInsertText.split('\n').length - 1;
+                currentStepOffset += insertedAssertLinesCount;
+            }
+
+            lineOffset += currentStepOffset;
         }
     });
 

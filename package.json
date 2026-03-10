@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python 自动化测试辅助插件，提供元素树、方法树、PATH 文件树和 AI 代码生成功能",
-  "version": "2.1.0",
+  "version": "2.1.4",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -16,7 +16,8 @@
     "onCommand:eleTreeViewer.refresh",
     "onCommand:methodsViewer.refresh",
     "onCommand:pathFileTree.refresh",
-    "onCommand:pathSniffViewer.refresh"
+    "onCommand:pathSniffViewer.refresh",
+    "onCommand:pathSniffViewer.toggleAutoRefresh"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -126,6 +127,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "pathSniffViewer.toggleAutoRefresh",
+        "title": "切换自动刷新",
+        "icon": "$(history)"
+      },
+      {
         "command": "pathFileTree.openItem",
         "title": "打开"
       },
@@ -166,6 +172,14 @@
       {
         "command": "pathFileTree.createCase",
         "title": "Create Case (创建用例)"
+      },
+      {
+        "command": "pathFileTree.copyItem",
+        "title": "Copy"
+      },
+      {
+        "command": "pathFileTree.pasteItem",
+        "title": "Paste"
       },
       {
         "command": "eleTreeViewer.dragToEditor",
@@ -289,6 +303,16 @@
           "group": "2_root"
         },
         {
+          "command": "pathFileTree.copyItem",
+          "when": "view == pathFileTree",
+          "group": "2_root"
+        },
+        {
+          "command": "pathFileTree.pasteItem",
+          "when": "view == pathFileTree && pathFileTree.hasClipboardItem",
+          "group": "2_root"
+        },
+        {
           "command": "pathFileTree.findInFolder",
           "when": "view == pathFileTree",
           "group": "2_root"
@@ -341,6 +365,16 @@
           "group": "2_cutcopypaste@3"
         },
         {
+          "command": "pathFileTree.copyItem",
+          "when": "view == pathFileTree",
+          "group": "2_cutcopypaste@4"
+        },
+        {
+          "command": "pathFileTree.pasteItem",
+          "when": "view == pathFileTree && pathFileTree.hasClipboardItem",
+          "group": "2_cutcopypaste@5"
+        },
+        {
           "command": "pathFileTree.findInFolder",
           "when": "view == pathFileTree && viewItem == pathFileTreeFolder",
           "group": "3_search"
@@ -390,6 +424,23 @@
         "command": "pathFileTree.delete",
         "key": "delete",
         "when": "listFocus && focusedView == 'pathFileTree' && !inputFocus"
+      },
+      {
+        "command": "pathFileTree.copyItem",
+        "key": "ctrl+c",
+        "mac": "cmd+c",
+        "when": "listFocus && focusedView == 'pathFileTree' && !inputFocus"
+      },
+      {
+        "command": "pathFileTree.pasteItem",
+        "key": "ctrl+v",
+        "mac": "cmd+v",
+        "when": "listFocus && focusedView == 'pathFileTree' && !inputFocus && pathFileTree.hasClipboardItem"
+      },
+      {
+        "command": "pathSniffViewer.toggleAutoRefresh",
+        "key": "ctrl+alt+4",
+        "mac": "cmd+alt+4"
       }
     ],
     "configurationDefaults": {
@@ -445,6 +496,52 @@
           "type": "boolean",
           "default": false,
           "description": "记录 AI 对话过程"
+        },
+        "path.sniff.typeMappings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default": {
+            "btn": [
+              "Button",
+              "btn"
+            ],
+            "checkbox": [
+              "CheckBox"
+            ],
+            "label": [
+              "Label"
+            ],
+            "item": [
+              "Item"
+            ],
+            "tab": [
+              "Tab"
+            ],
+            "edit": [
+              "LineEdit"
+            ],
+            "combobox": [
+              "ComboBox"
+            ],
+            "menu": [
+              "QMenu"
+            ],
+            "msgdlg": [
+              "MessageDlg"
+            ]
+          },
+          "description": "Sniff 复制模板使用的控件类型映射。按 widget_def.type 做大小写不敏感包含匹配，首个命中的 key 作为生成属性名的类型后缀。"
+        },
+        "path.sniff.clientRequestTimeoutMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 1,
+          "description": "PATH Sniff client 璇锋眰瓒呮椂鏃堕棿锛屽崟浣嶄负姣銆?"
         }
       }
     }

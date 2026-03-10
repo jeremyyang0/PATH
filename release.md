@@ -1,3 +1,24 @@
+
+
+# 2.1.3
+
+## New
+- 新增sniff client超时配置项
+
+## Update
+- 右键debug配置默认支持markrunner --ignore-job-start参数
+- 复制元素定义时默认底部增加一个换行
+
+
+# 2.1.2
+
+## Fix
+- 修复EPIPE Error
+- 修复文件树非激活情况下仍会响应代码跳转动作
+## New
+- 文件树新增复制粘贴功能
+
+
 # 2.1.0
 
 ## New
@@ -8,7 +29,10 @@
 - 为 `PATH Sniff` 三个视图和 `PATH 文件树` 增加独立 SVG 图标，整体视觉风格与元素树、方法树保持一致。
 - 元素树和方法树 Webview 增加前端 ready/debug 状态展示，便于排查扩展启动和数据加载问题。
 - `PATH Sniff` 主视图调整了交互布局：`server_name` 与应用按钮同排显示，刷新/查找入口收敛到控件树标题区，查找改为弹窗输入 JSON 后执行。
-- 将插件整体重构为 `features + shared` 模块化架构，拆分元素树、方法树、文件树、Sniff、AI、Workbench、禅道等功能的注册、Provider 与 Service。
+- 新增自动刷新控件树功能
+
+## Update
+- 步骤对应的代码将插入到步骤注释正下方，预期对应的断言代码插入到“预期结果注释”正下方
 
 
 # 2.0.0

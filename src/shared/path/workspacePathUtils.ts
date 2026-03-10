@@ -11,6 +11,10 @@ export function isPythonFile(filePath: string): boolean {
     return filePath.endsWith('.py');
 }
 
+export function shouldIgnorePythonTreeDirectory(directoryName: string): boolean {
+    return directoryName.startsWith('_');
+}
+
 export function isMethodRelatedPath(filePath: string): boolean {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {

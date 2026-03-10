@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { loadWebviewHtml } from '../../../shared/webview/loadWebviewHtml';
+import { SniffWidgetDefCopyService } from '../services/sniffWidgetDefCopyService';
 import { SniffViewStateStore } from '../services/sniffViewStateStore';
 
 export class SniffOverviewWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'pathSniffOverviewViewer';
 
     private view?: vscode.WebviewView;
+    private readonly copyService = new SniffWidgetDefCopyService();
 
     public constructor(
         private readonly extensionUri: vscode.Uri,
@@ -26,6 +28,11 @@ export class SniffOverviewWebviewProvider implements vscode.WebviewViewProvider 
         webviewView.webview.onDidReceiveMessage(data => {
             if (data.command === 'ready') {
                 this.pushState();
+                return;
+            }
+
+            if (data.command === 'copyWidgetDefTemplate') {
+                void this.copyWidgetDefTemplate();
             }
         });
 
@@ -54,5 +61,18 @@ export class SniffOverviewWebviewProvider implements vscode.WebviewViewProvider 
             command: 'setOverviewState',
             state: this.stateStore.getDetailsState()
         });
+    }
+
+    private async copyWidgetDefTemplate(): Promise<void> {
+        const detailsState = this.stateStore.getDetailsState();
+        const copyText = this.copyService.buildCopyText(detailsState.widgetDef);
+
+        if (!copyText) {
+            void vscode.window.showInformationMessage('当前没有可复制的 widget_def 模板');
+            return;
+        }
+
+        await vscode.env.clipboard.writeText(copyText);
+        void vscode.window.showInformationMessage('已复制 Sniff widget_def 模板');
     }
 }

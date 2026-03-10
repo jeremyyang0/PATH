@@ -7,11 +7,17 @@ import { PathFileTreeDataProvider } from '../providers/pathFileTreeDataProvider'
 
 export class PathFileTreeCommandService {
     private activeItem?: TreeItem;
+    private clipboardItem?: {
+        sourceUri: vscode.Uri;
+        nodeType: 'file' | 'folder';
+    };
 
     public constructor(
         private readonly dataProvider: PathFileTreeDataProvider,
         private readonly treeView: vscode.TreeView<TreeItem>
-    ) {}
+    ) {
+        void this.updateClipboardContext();
+    }
 
     public setActiveItem(item?: TreeItem): void {
         this.activeItem = item;
@@ -22,6 +28,10 @@ export class PathFileTreeCommandService {
     }
 
     public async revealFileInTree(filePath: string): Promise<void> {
+        if (!this.treeView.visible) {
+            return;
+        }
+
         const item = this.dataProvider.findItemByPath(filePath);
         if (!item) {
             return;
@@ -175,6 +185,48 @@ export class PathFileTreeCommandService {
         await vscode.env.clipboard.writeText(relativePath || '.');
     }
 
+    public async copyItem(element?: TreeItem): Promise<void> {
+        const targetItem = this.getTargetItem(element);
+        if (!targetItem?.filePath) {
+            return;
+        }
+
+        this.clipboardItem = {
+            sourceUri: vscode.Uri.file(targetItem.filePath),
+            nodeType: targetItem.nodeType === 'folder' ? 'folder' : 'file'
+        };
+        await this.updateClipboardContext();
+        vscode.window.setStatusBarMessage(`已复制 ${path.basename(targetItem.filePath)}`, 2000);
+    }
+
+    public async pasteItem(element?: TreeItem): Promise<void> {
+        if (!this.clipboardItem) {
+            vscode.window.showInformationMessage('PATH 文件树中没有可粘贴的项目。');
+            return;
+        }
+
+        const destinationUri = this.getPasteTargetUri(element);
+        if (!destinationUri) {
+            return;
+        }
+
+        const { sourceUri, nodeType } = this.clipboardItem;
+        if (nodeType === 'folder' && this.isSameOrDescendantPath(destinationUri.fsPath, sourceUri.fsPath)) {
+            vscode.window.showErrorMessage('不能将文件夹粘贴到其自身或子目录中。');
+            return;
+        }
+
+        const targetUri = await this.getAvailablePasteUri(sourceUri, destinationUri, nodeType);
+        try {
+            await vscode.workspace.fs.copy(sourceUri, targetUri, { overwrite: false });
+            this.refresh();
+            await this.revealFileInTree(targetUri.fsPath);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`粘贴失败: ${message}`);
+        }
+    }
+
     public async findInFolder(element?: TreeItem): Promise<void> {
         const targetUri = this.getTargetUri(element);
         if (!targetUri) {
@@ -236,5 +288,70 @@ export class PathFileTreeCommandService {
         }
 
         return vscode.Uri.file(path.join(parentUri.fsPath, normalizedInput));
+    }
+
+    private getPasteTargetUri(element?: TreeItem): vscode.Uri | undefined {
+        const targetItem = this.getTargetItem(element);
+        if (!targetItem?.filePath) {
+            return getWorkspaceRootUri();
+        }
+
+        if (targetItem.nodeType === 'file') {
+            return vscode.Uri.file(path.dirname(targetItem.filePath));
+        }
+
+        return vscode.Uri.file(targetItem.filePath);
+    }
+
+    private async updateClipboardContext(): Promise<void> {
+        await vscode.commands.executeCommand('setContext', 'pathFileTree.hasClipboardItem', Boolean(this.clipboardItem));
+    }
+
+    private isSameOrDescendantPath(candidatePath: string, sourcePath: string): boolean {
+        const normalizedCandidate = path.resolve(candidatePath);
+        const normalizedSource = path.resolve(sourcePath);
+        if (normalizedCandidate === normalizedSource) {
+            return true;
+        }
+
+        const relativePath = path.relative(normalizedSource, normalizedCandidate);
+        return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+    }
+
+    private async getAvailablePasteUri(
+        sourceUri: vscode.Uri,
+        destinationUri: vscode.Uri,
+        nodeType: 'file' | 'folder'
+    ): Promise<vscode.Uri> {
+        const sourceName = path.basename(sourceUri.fsPath);
+
+        for (let index = 0; ; index += 1) {
+            const candidateName = index === 0
+                ? sourceName
+                : this.buildCopyName(sourceName, nodeType, index);
+            const candidateUri = vscode.Uri.file(path.join(destinationUri.fsPath, candidateName));
+            if (!await this.pathExists(candidateUri)) {
+                return candidateUri;
+            }
+        }
+    }
+
+    private buildCopyName(sourceName: string, nodeType: 'file' | 'folder', index: number): string {
+        const suffix = index === 1 ? ' - copy' : ` - copy ${index}`;
+        if (nodeType === 'folder') {
+            return `${sourceName}${suffix}`;
+        }
+
+        const parsedPath = path.parse(sourceName);
+        return `${parsedPath.name}${suffix}${parsedPath.ext}`;
+    }
+
+    private async pathExists(targetUri: vscode.Uri): Promise<boolean> {
+        try {
+            await vscode.workspace.fs.stat(targetUri);
+            return true;
+        } catch {
+            return false;
+        }
     }
 }

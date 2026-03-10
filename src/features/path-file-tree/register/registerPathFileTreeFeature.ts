@@ -50,6 +50,12 @@ export function registerPathFileTreeFeature(context: vscode.ExtensionContext): P
         vscode.commands.registerCommand('pathFileTree.copyRelativePath', async (element?: TreeItem) => {
             await commandService.copyRelativePath(element);
         }),
+        vscode.commands.registerCommand('pathFileTree.copyItem', async (element?: TreeItem) => {
+            await commandService.copyItem(element);
+        }),
+        vscode.commands.registerCommand('pathFileTree.pasteItem', async (element?: TreeItem) => {
+            await commandService.pasteItem(element);
+        }),
         vscode.commands.registerCommand('pathFileTree.findInFolder', async (element?: TreeItem) => {
             await commandService.findInFolder(element);
         }),
