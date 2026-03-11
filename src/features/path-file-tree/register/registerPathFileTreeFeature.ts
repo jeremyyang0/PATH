@@ -35,6 +35,12 @@ export function registerPathFileTreeFeature(context: vscode.ExtensionContext): P
         vscode.commands.registerCommand('pathFileTree.newFolder', async (element?: TreeItem) => {
             await commandService.createNewFolder(element);
         }),
+        vscode.commands.registerCommand('pathFileTree.newPythonPackage', async (element?: TreeItem) => {
+            await commandService.createNewPythonPackage(element);
+        }),
+        vscode.commands.registerCommand('pathFileTree.newSniffBranch', async (element?: TreeItem) => {
+            await commandService.createNewSniffBranch(element);
+        }),
         vscode.commands.registerCommand('pathFileTree.rename', async (element?: TreeItem) => {
             await commandService.renameItem(element);
         }),

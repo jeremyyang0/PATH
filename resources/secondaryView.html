@@ -3,154 +3,430 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ele Tree Secondary View</title>
+    <title>PATH Agent</title>
     <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        * {
+            box-sizing: border-box;
+            min-width: 0;
+        }
+
+        html,
         body {
-            font-family: var(--vscode-font-family);
-            font-size: var(--vscode-font-size);
-            color: var(--vscode-foreground);
-            background-color: var(--vscode-editor-background);
-            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        body {
             margin: 0;
+            padding: 18px;
+            background: var(--vscode-editor-background);
+            color: var(--vscode-foreground);
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size, 13px);
+            line-height: 1.55;
+            background-image:
+                radial-gradient(circle at top left, color-mix(in srgb, var(--vscode-focusBorder) 24%, transparent) 0, transparent 34%),
+                linear-gradient(180deg, color-mix(in srgb, var(--vscode-editor-background) 82%, var(--vscode-sideBar-background) 18%) 0%, var(--vscode-editor-background) 100%);
         }
-        
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
+
+        .layout {
+            display: grid;
+            gap: 14px;
         }
-        
-        .header {
-            background-color: var(--vscode-editor-inactiveSelectionBackground);
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid var(--vscode-activityBarBadge-background);
+
+        .panel {
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 16px;
+            background:
+                linear-gradient(160deg, color-mix(in srgb, var(--vscode-editor-background) 64%, var(--vscode-sideBar-background) 36%) 0%, color-mix(in srgb, var(--vscode-editor-background) 80%, transparent) 100%);
+            padding: 14px;
+            box-shadow: inset 0 1px 0 color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
         }
-        
-        .title {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: var(--vscode-activityBarBadge-background);
-        }
-        
-        .subtitle {
-            font-size: 16px;
+
+        .panel h2 {
+            margin: 0 0 10px;
+            font-size: 0.92em;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
             color: var(--vscode-descriptionForeground);
         }
-        
-        .content-section {
-            background-color: var(--vscode-editor-inactiveSelectionBackground);
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .section-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            color: var(--vscode-activityBarBadge-background);
-        }
-        
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .info-card {
-            background-color: var(--vscode-input-background);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 6px;
-            padding: 15px;
-        }
-        
-        .info-label {
-            font-weight: bold;
-            color: var(--vscode-activityBarBadge-background);
-            margin-bottom: 5px;
-        }
-        
-        .info-value {
-            color: var(--vscode-foreground);
-        }
-        
-        .button {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
+
+        details.panel > summary {
+            list-style: none;
             cursor: pointer;
-            font-size: 14px;
-            margin-right: 10px;
-            margin-bottom: 10px;
         }
-        
-        .button:hover {
-            background-color: var(--vscode-button-hoverBackground);
+
+        details.panel > summary::-webkit-details-marker {
+            display: none;
         }
-        
-        .log-area {
-            background-color: var(--vscode-terminal-background);
-            border: 1px solid var(--vscode-terminal-border);
-            border-radius: 4px;
-            padding: 15px;
-            font-family: var(--vscode-editor-font-family);
-            font-size: var(--vscode-editor-font-size);
-            color: var(--vscode-terminal-foreground);
+
+        .panel-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .panel-summary h2 {
+            margin: 0;
+        }
+
+        .panel-summary::after {
+            content: '⌄';
+            color: var(--vscode-descriptionForeground);
+            font-size: 0.92em;
+            transform: rotate(0deg);
+            transition: transform 120ms ease;
+        }
+
+        details.panel:not([open]) > summary .panel-summary::after {
+            transform: rotate(-90deg);
+        }
+
+        .panel-body {
+            margin-top: 10px;
+        }
+
+        .headline {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .headline-side {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .headline-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: 0.01em;
+        }
+
+        .headline-subtitle {
+            margin-top: 6px;
+            color: var(--vscode-descriptionForeground);
+            line-height: 1.5;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 0.85em;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            white-space: nowrap;
+        }
+
+        .status-pill.small {
+            padding: 2px 7px;
+            font-size: 0.78em;
+        }
+
+        .run-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px;
+        }
+
+        .meta-card {
+            padding: 12px;
+            border-radius: 8px;
+            background: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border);
+        }
+
+        .meta-card label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--vscode-descriptionForeground);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .meta-card div {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .summary {
             white-space: pre-wrap;
-            max-height: 200px;
-            overflow-y: auto;
+            line-height: 1.5;
+            font-size: 1em;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .list-item {
+            padding: 12px;
+            border-radius: 12px;
+            background: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border);
+        }
+
+        .list-item strong {
+            display: block;
+            margin-bottom: 6px;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .list-item div {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .list-item pre {
+            margin: 8px 0 0;
+            white-space: pre-wrap;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 0.92em;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .assistant-list {
+            display: grid;
+            gap: 18px;
+        }
+
+        .assistant-message {
+            position: relative;
+            padding-left: 18px;
+        }
+
+        .assistant-message::before {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 6px;
+            bottom: -18px;
+            width: 1px;
+            background: color-mix(in srgb, var(--vscode-descriptionForeground) 28%, transparent);
+        }
+
+        .assistant-message:last-child::before {
+            bottom: 12px;
+        }
+
+        .assistant-card {
+            position: relative;
+            overflow: hidden;
+            padding: 0;
+            border: none;
+            background: transparent;
+        }
+
+        .assistant-card.streaming::after {
+            content: '';
+            position: absolute;
+            inset: auto 0 0 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--vscode-focusBorder) 12%, transparent) 50%, transparent 100%);
+            transform: translateX(-100%);
+            animation: scan 1.8s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes scan {
+            to {
+                transform: translateX(100%);
+            }
+        }
+
+        .assistant-content {
+            margin: 0;
+            white-space: pre-wrap;
+            line-height: 1.7;
+            font-family: var(--vscode-font-family);
+            font-size: 1em;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .assistant-tools {
+            display: grid;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        details.tool-item {
+            border-radius: 10px;
+            border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 88%, transparent);
+            background: color-mix(in srgb, var(--vscode-input-background) 72%, transparent);
+            overflow: hidden;
+        }
+
+        details.tool-item summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 8px 10px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 6px;
+            align-items: center;
+        }
+
+        details.tool-item summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .tool-summary {
+            display: grid;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .tool-summary strong {
+            color: var(--vscode-foreground);
+            font-size: 0.92em;
+        }
+
+        .tool-summary span {
+            color: var(--vscode-descriptionForeground);
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            white-space: normal;
+            font-size: 0.82em;
+        }
+
+        .tool-body {
+            padding: 0 10px 10px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .tool-block {
+            padding: 8px;
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--vscode-editor-background) 78%, transparent);
+            border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 82%, transparent);
+        }
+
+        .tool-block label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--vscode-descriptionForeground);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .tool-block pre {
+            margin: 0;
+            white-space: pre-wrap;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 0.85em;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .tool-compact {
+            color: var(--vscode-descriptionForeground);
+            font-size: 0.78em;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        button {
+            border: 1px solid var(--vscode-button-border, transparent);
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: transparent;
+            color: var(--vscode-textLink-foreground);
+            border-color: var(--vscode-panel-border);
+        }
+
+        .empty {
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        code {
+            font-family: var(--vscode-editor-font-family);
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="title">🌳 Ele Tree Secondary View</div>
-            <div class="subtitle">这是右侧的辅助视图窗口，后续可以展示更多内容</div>
-        </div>
-        
-        <div class="content-section">
-            <div class="section-title">📊 项目信息</div>
-            <div class="info-grid">
-                <div class="info-card">
-                    <div class="info-label">插件名称</div>
-                    <div class="info-value">Ele Tree Viewer</div>
+    <div class="layout">
+        <section class="panel">
+            <div class="headline">
+                <div>
+                    <div class="headline-title">PATH Agent</div>
+                    <div class="headline-subtitle" id="headlineSubtitle">Waiting for a run.</div>
                 </div>
-                <div class="info-card">
-                    <div class="info-label">版本</div>
-                    <div class="info-value">0.0.9</div>
-                </div>
-                <div class="info-card">
-                    <div class="info-label">状态</div>
-                    <div class="info-value">运行中</div>
-                </div>
-                <div class="info-card">
-                    <div class="info-label">当前时间</div>
-                    <div class="info-value" id="current-time">--</div>
+                <div class="headline-side">
+                    <div class="run-controls" id="runControls"></div>
+                    <div class="status-pill" id="statusPill">IDLE</div>
                 </div>
             </div>
-        </div>
-        
-        <div class="content-section">
-            <div class="section-title">🛠️ 操作面板</div>
-            <button class="button" onclick="sendMessage('Hello from Secondary View!')">发送消息</button>
-            <button class="button" onclick="refreshData()">刷新数据</button>
-            <button class="button" onclick="clearLog()">清除日志</button>
-        </div>
-        
-        <div class="content-section">
-            <div class="section-title">📝 活动日志</div>
-            <div class="log-area" id="log-area">欢迎使用 Ele Tree Secondary View！
-这里可以展示各种信息和日志。
-后续可以根据需要添加更多功能...</div>
-        </div>
+        </section>
+
+        <details class="panel" id="conversationPanel" open>
+            <summary>
+                <div class="panel-summary">
+                    <h2>Conversation</h2>
+                </div>
+            </summary>
+            <div class="panel-body">
+                <div class="assistant-list" id="assistantList"></div>
+            </div>
+        </details>
+
+        <section class="panel" id="summaryPanel">
+            <h2>Summary</h2>
+            <div class="summary" id="summary">No active run.</div>
+        </section>
+
+        <section class="panel" id="proposalPanel">
+            <h2>Proposals</h2>
+            <div class="list" id="proposalList"></div>
+        </section>
+
     </div>
-    
+
     <script src="secondaryView.js"></script>
 </body>
-</html> 
+</html>

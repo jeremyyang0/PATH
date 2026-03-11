@@ -1,9 +1,10 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { createCase } from '../../../shared/case/createCase';
-import { getWorkspaceRootUri } from '../../../shared/path/workspacePathUtils';
+import { getWorkspaceRootUri, isMethodRelatedPath } from '../../../shared/path/workspacePathUtils';
 import { TreeItem } from '../../../shared/tree/treeItem';
 import { PathFileTreeDataProvider } from '../providers/pathFileTreeDataProvider';
+import { createSniffBranch, isValidSniffBranchName } from './sniffBranchGenerator';
 
 export class PathFileTreeCommandService {
     private activeItem?: TreeItem;
@@ -17,10 +18,12 @@ export class PathFileTreeCommandService {
         private readonly treeView: vscode.TreeView<TreeItem>
     ) {
         void this.updateClipboardContext();
+        void this.updateMethodContext();
     }
 
     public setActiveItem(item?: TreeItem): void {
         this.activeItem = item;
+        void this.updateMethodContext();
     }
 
     public refresh(): void {
@@ -44,6 +47,7 @@ export class PathFileTreeCommandService {
                 expand: true
             });
             this.activeItem = item;
+            await this.updateMethodContext();
         } catch (error) {
             console.error('Failed to reveal item in PATH file tree:', error);
         }
@@ -65,12 +69,23 @@ export class PathFileTreeCommandService {
         const parentUri = element?.nodeType === 'file'
             ? vscode.Uri.file(path.dirname(targetUri.fsPath))
             : targetUri;
-        const newFileUri = await this.promptForChildPath(parentUri, '输入新文件名', '例如: new_test.py 或 folder/new_test.py');
+        const newFileUri = await this.promptForChildPath(
+            parentUri,
+            '输入新文件名',
+            '例如: new_test.py 或 folder/new_test.py',
+            '.py',
+            [0, 0]
+        );
         if (!newFileUri) {
             return;
         }
 
         try {
+            if (await this.pathExists(newFileUri)) {
+                vscode.window.showErrorMessage(`文件已存在: ${path.basename(newFileUri.fsPath)}`);
+                return;
+            }
+
             const parentDirUri = vscode.Uri.file(path.dirname(newFileUri.fsPath));
             await vscode.workspace.fs.createDirectory(parentDirUri);
             await vscode.workspace.fs.writeFile(newFileUri, new Uint8Array());
@@ -91,7 +106,11 @@ export class PathFileTreeCommandService {
         const parentUri = element?.nodeType === 'file'
             ? vscode.Uri.file(path.dirname(targetUri.fsPath))
             : targetUri;
-        const newFolderUri = await this.promptForChildPath(parentUri, '输入新文件夹名', '例如: new_folder 或 parent/new_folder');
+        const newFolderUri = await this.promptForChildPath(
+            parentUri,
+            '输入新文件夹名',
+            '例如: new_folder 或 parent/new_folder'
+        );
         if (!newFolderUri) {
             return;
         }
@@ -102,6 +121,88 @@ export class PathFileTreeCommandService {
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             vscode.window.showErrorMessage(`创建文件夹失败: ${message}`);
+        }
+    }
+
+    public async createNewPythonPackage(element?: TreeItem): Promise<void> {
+        const targetUri = this.getTargetUri(element);
+        if (!targetUri) {
+            return;
+        }
+
+        const parentUri = element?.nodeType === 'file'
+            ? vscode.Uri.file(path.dirname(targetUri.fsPath))
+            : targetUri;
+        const packageUri = await this.promptForChildPath(
+            parentUri,
+            '输入 Python 包名',
+            '例如: new_package 或 parent/new_package'
+        );
+        if (!packageUri) {
+            return;
+        }
+
+        try {
+            if (await this.pathExists(packageUri)) {
+                vscode.window.showErrorMessage(`Python 包已存在: ${path.basename(packageUri.fsPath)}`);
+                return;
+            }
+
+            await vscode.workspace.fs.createDirectory(packageUri);
+            await vscode.workspace.fs.writeFile(
+                vscode.Uri.file(path.join(packageUri.fsPath, '__init__.py')),
+                new Uint8Array()
+            );
+            this.refresh();
+            await this.revealFileInTree(packageUri.fsPath);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`创建 Python 包失败: ${message}`);
+        }
+    }
+
+    public async createNewSniffBranch(element?: TreeItem): Promise<void> {
+        const parentUri = this.getCreationTargetUri(element);
+        if (!parentUri) {
+            return;
+        }
+
+        if (!isMethodRelatedPath(parentUri.fsPath)) {
+            vscode.window.showErrorMessage('新建 Sniff 分支仅支持 method 目录下的节点');
+            return;
+        }
+
+        const branchName = await vscode.window.showInputBox({
+            prompt: '输入 Sniff 分支名称',
+            placeHolder: '例如: login_dialog',
+            ignoreFocusOut: true,
+            validateInput: value => {
+                const normalizedValue = value.trim();
+                if (!normalizedValue || !isValidSniffBranchName(normalizedValue)) {
+                    return '请输入 xxx_xxx 形式的名称';
+                }
+
+                return null;
+            }
+        });
+        if (!branchName) {
+            return;
+        }
+
+        const normalizedBranchName = branchName.trim();
+        const branchUri = vscode.Uri.file(path.join(parentUri.fsPath, normalizedBranchName));
+        if (await this.pathExists(branchUri)) {
+            vscode.window.showErrorMessage(`Sniff 分支已存在: ${normalizedBranchName}`);
+            return;
+        }
+
+        try {
+            const scaffold = await createSniffBranch(parentUri, normalizedBranchName);
+            this.refresh();
+            await this.revealFileInTree(scaffold.branchUri.fsPath);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`创建 Sniff 分支失败: ${message}`);
         }
     }
 
@@ -266,15 +367,18 @@ export class PathFileTreeCommandService {
         return getWorkspaceRootUri();
     }
 
-    // 统一处理“在目标目录下创建子路径”的输入逻辑，避免文件和目录命令各自拼路径。
     private async promptForChildPath(
         parentUri: vscode.Uri,
         prompt: string,
-        placeHolder: string
+        placeHolder: string,
+        value?: string,
+        valueSelection?: [number, number]
     ): Promise<vscode.Uri | undefined> {
         const input = await vscode.window.showInputBox({
             prompt,
             placeHolder,
+            value,
+            valueSelection,
             ignoreFocusOut: true
         });
 
@@ -303,8 +407,26 @@ export class PathFileTreeCommandService {
         return vscode.Uri.file(targetItem.filePath);
     }
 
+    private getCreationTargetUri(element?: TreeItem): vscode.Uri | undefined {
+        const targetItem = this.getTargetItem(element);
+        if (!targetItem?.filePath) {
+            return getWorkspaceRootUri();
+        }
+
+        if (targetItem.nodeType === 'file') {
+            return vscode.Uri.file(path.dirname(targetItem.filePath));
+        }
+
+        return vscode.Uri.file(targetItem.filePath);
+    }
+
     private async updateClipboardContext(): Promise<void> {
         await vscode.commands.executeCommand('setContext', 'pathFileTree.hasClipboardItem', Boolean(this.clipboardItem));
+    }
+
+    private async updateMethodContext(): Promise<void> {
+        const targetPath = this.activeItem?.filePath;
+        await vscode.commands.executeCommand('setContext', 'pathFileTree.isMethodContext', Boolean(targetPath && isMethodRelatedPath(targetPath)));
     }
 
     private isSameOrDescendantPath(candidatePath: string, sourcePath: string): boolean {

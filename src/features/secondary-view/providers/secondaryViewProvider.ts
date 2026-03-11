@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { loadWebviewHtml } from '../../../shared/webview/loadWebviewHtml';
+import { agentService } from '../../ai/services/agentService';
+import { agentPanelStateStore } from '../services/agentPanelStateStore';
 
 export class SecondaryViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'eleSecondaryView';
@@ -20,16 +22,53 @@ export class SecondaryViewProvider implements vscode.WebviewViewProvider {
         };
         webviewView.webview.html = loadWebviewHtml(this.extensionUri, webviewView.webview, 'resources/secondaryView.html', [
             {
-                placeholder: 'src="secondaryView.js"',
-                relativePath: 'resources/secondaryView.js'
+                placeholder: '<script src="secondaryView.js"></script>',
+                relativePath: 'resources/secondaryView.js',
+                kind: 'inline-script'
             }
         ]);
 
         webviewView.webview.onDidReceiveMessage(data => {
-            if (data.command === 'alert') {
-                vscode.window.showInformationMessage(data.text);
+            if (data.command === 'ready') {
+                this.pushState();
+                return;
+            }
+
+            if (data.command === 'applyProposal' && typeof data.proposalId === 'string') {
+                void agentPanelStateStore.applyProposal(data.proposalId).catch(error => {
+                    void vscode.window.showErrorMessage(`Failed to apply proposal: ${error instanceof Error ? error.message : String(error)}`);
+                });
+                return;
+            }
+
+            if (data.command === 'rejectProposal' && typeof data.proposalId === 'string') {
+                agentPanelStateStore.rejectProposal(data.proposalId);
+                return;
+            }
+
+            if (data.command === 'openFile' && typeof data.filePath === 'string') {
+                void vscode.window.showTextDocument(vscode.Uri.file(data.filePath), { preview: false }).then(undefined, error => {
+                    void vscode.window.showErrorMessage(`Failed to open file: ${error instanceof Error ? error.message : String(error)}`);
+                });
+                return;
+            }
+
+            if (data.command === 'resumeRun') {
+                void agentService.resumeRun().catch(error => {
+                    void vscode.window.showErrorMessage(`Failed to resume PATH Agent: ${error instanceof Error ? error.message : String(error)}`);
+                });
+                return;
+            }
+
+            if (data.command === 'stopRun') {
+                agentService.stopRun();
             }
         });
+
+        agentPanelStateStore.onDidChangeState(() => {
+            this.pushState();
+        });
+        this.pushState();
     }
 
     public revive(panel: vscode.WebviewView): void {
@@ -38,5 +77,16 @@ export class SecondaryViewProvider implements vscode.WebviewViewProvider {
 
     public focus(): void {
         this.view?.show?.(true);
+    }
+
+    public pushState(): void {
+        if (!this.view) {
+            return;
+        }
+
+        void this.view.webview.postMessage({
+            command: 'renderState',
+            state: agentPanelStateStore.getState()
+        });
     }
 }

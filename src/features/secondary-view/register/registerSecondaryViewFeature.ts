@@ -11,11 +11,13 @@ export function registerSecondaryViewFeature(context: vscode.ExtensionContext): 
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(SecondaryViewProvider.viewType, provider),
         statusBarItem,
-        vscode.commands.registerCommand('eleTreeViewer.openSecondaryView', () => {
-            void focusSecondaryViewContainer();
+        vscode.commands.registerCommand('eleTreeViewer.openSecondaryView', async () => {
+            await focusSecondaryViewContainer();
+            provider.focus();
         }),
         vscode.commands.registerCommand('eleSecondaryView.focus', async () => {
             await focusSecondaryViewContainer();
+            provider.focus();
         })
     );
 

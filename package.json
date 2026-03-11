@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python 自动化测试辅助插件，提供元素树、方法树、PATH 文件树和 AI 代码生成功能",
-  "version": "2.1.4",
+  "version": "2.2.6",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -146,6 +146,16 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "pathFileTree.newPythonPackage",
+        "title": "新建 Python 包...",
+        "icon": "$(package)"
+      },
+      {
+        "command": "pathFileTree.newSniffBranch",
+        "title": "新建元素定义集...",
+        "icon": "$(symbol-class)"
+      },
+      {
         "command": "pathFileTree.rename",
         "title": "重命名"
       },
@@ -253,6 +263,10 @@
       {
         "command": "eleTreeViewer.aiGeneration",
         "title": "AI Generation"
+      },
+      {
+        "command": "eleTreeViewer.aiAgentGeneration",
+        "title": "AI Agent Generation"
       }
     ],
     "menus": {
@@ -286,6 +300,16 @@
           "command": "pathFileTree.newFolder",
           "when": "view == pathFileTree",
           "group": "navigation@3"
+        },
+        {
+          "command": "pathFileTree.newPythonPackage",
+          "when": "view == pathFileTree",
+          "group": "navigation@4"
+        },
+        {
+          "command": "pathFileTree.newSniffBranch",
+          "when": "view == pathFileTree && pathFileTree.isMethodContext",
+          "group": "navigation@5"
         },
         {
           "command": "pathFileTree.revealInOS",
@@ -338,6 +362,16 @@
           "command": "pathFileTree.newFolder",
           "when": "view == pathFileTree",
           "group": "0_new@2"
+        },
+        {
+          "command": "pathFileTree.newPythonPackage",
+          "when": "view == pathFileTree",
+          "group": "0_new@3"
+        },
+        {
+          "command": "pathFileTree.newSniffBranch",
+          "when": "view == pathFileTree && (viewItem == pathFileTreeMethodFolder || viewItem == pathFileTreeMethodFile)",
+          "group": "0_new@4"
         },
         {
           "command": "pathFileTree.rename",
@@ -399,6 +433,11 @@
         },
         {
           "command": "eleTreeViewer.aiGeneration",
+          "group": "navigation",
+          "when": "resourceLangId == python && resourceFilename =~ /^test_.+\\.py$/"
+        },
+        {
+          "command": "eleTreeViewer.aiAgentGeneration",
           "group": "navigation",
           "when": "resourceLangId == python && resourceFilename =~ /^test_.+\\.py$/"
         }
@@ -496,6 +535,42 @@
           "type": "boolean",
           "default": false,
           "description": "记录 AI 对话过程"
+        },
+        "path.ai.agent.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用 PATH Agent 版 AI Generation"
+        },
+        "path.ai.agent.maxTurns": {
+          "type": "number",
+          "default": 80,
+          "minimum": 1,
+          "description": "PATH Agent 单次运行的最大推理轮数"
+        },
+        "path.ai.agent.logTools": {
+          "type": "boolean",
+          "default": true,
+          "description": "在 PATH Agent 面板中记录工具调用结果"
+        },
+        "path.ai.agent.allowedMcpServers": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "允许 PATH Agent 访问的 MCP server 名称白名单"
+        },
+        "path.ai.agent.skills": {
+          "type": "array",
+          "default": [
+            "generate_test_steps",
+            "find_matching_methods",
+            "inspect_widget_and_method"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "PATH Agent 可用技能列表"
         },
         "path.sniff.typeMappings": {
           "type": "object",

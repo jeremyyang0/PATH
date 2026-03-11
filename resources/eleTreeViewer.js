@@ -332,6 +332,19 @@ function selectItem(treePath) {
     const item = document.querySelector(`[data-path="${escapeHtml(treePath)}"]`);
     if (item) {
         item.classList.add('selected');
+        if (vscode) {
+            vscode.postMessage({
+                command: 'selectItem',
+                item: {
+                    fullPath: treePath,
+                    label: item.getAttribute('data-label') || item.querySelector('.tree-label')?.textContent || '',
+                    codePath: item.getAttribute('data-codepath') || '',
+                    eleFilePath: item.getAttribute('data-filepath') || '',
+                    eleLineNumber: parseInt(item.getAttribute('data-line') || '0', 10) || 0,
+                    eleVariableName: item.getAttribute('data-variablename') || ''
+                }
+            });
+        }
     }
 }
 

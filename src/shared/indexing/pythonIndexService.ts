@@ -34,6 +34,7 @@ export interface MethodInfo {
     name: string;
     line: number;
     doc: string;
+    className?: string;
 }
 
 /**
@@ -323,11 +324,33 @@ export class PythonIndexService {
             const lines = content.split(/\r?\n/);
             const methods: MethodInfo[] = [];
             const methodDefRegex = /^(\s*)def\s+([a-zA-Z][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(?:->\s*[^:]+)?\s*:/;
+            const classDefRegex = /^(\s*)class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\))?\s*:/;
+            const classStack: Array<{ indent: number; name: string }> = [];
 
             for (let index = 0; index < lines.length; index++) {
                 const line = lines[index];
                 if (line === undefined) {
                     continue;
+                }
+
+                const classMatch = line.match(classDefRegex);
+                if (classMatch?.[2]) {
+                    const indent = classMatch[1]?.length ?? 0;
+                    while (classStack.length > 0 && indent <= classStack[classStack.length - 1]!.indent) {
+                        classStack.pop();
+                    }
+                    classStack.push({
+                        indent,
+                        name: classMatch[2]
+                    });
+                    continue;
+                }
+
+                const currentIndent = line.search(/\S/);
+                if (currentIndent !== -1 && line.trim() !== '' && !line.trim().startsWith('#')) {
+                    while (classStack.length > 0 && currentIndent <= classStack[classStack.length - 1]!.indent) {
+                        classStack.pop();
+                    }
                 }
 
                 const lineNumber = index + 1;
@@ -380,7 +403,8 @@ export class PythonIndexService {
                 methods.push({
                     name: methodName,
                     line: lineNumber,
-                    doc
+                    doc,
+                    className: classStack[classStack.length - 1]?.name
                 });
             }
 

@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { treeSelectionStore } from '../../../shared/state/treeSelectionStore';
 import { TreeItem } from '../../../shared/tree/treeItem';
 import { loadWebviewHtml } from '../../../shared/webview/loadWebviewHtml';
 import { MethodsDataProvider } from './methodsDataProvider';
@@ -72,6 +73,18 @@ export class MethodsTreeWebviewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'getState':
                     this.postMessage({ command: 'requestState' });
+                    break;
+                case 'selectItem':
+                    treeSelectionStore.setMethodsTreeSelection({
+                        view: 'methodsTree',
+                        path: String(data.item?.fullPath || ''),
+                        label: String(data.item?.label || ''),
+                        codePath: data.item?.codePath ? String(data.item.codePath) : undefined,
+                        filePath: data.item?.methodFilePath ? String(data.item.methodFilePath) : undefined,
+                        lineNumber: typeof data.item?.methodLine === 'number' ? data.item.methodLine : undefined,
+                        methodName: data.item?.methodName ? String(data.item.methodName) : undefined,
+                        methodDoc: data.item?.methodDoc ? String(data.item.methodDoc) : undefined
+                    });
                     break;
             }
         });

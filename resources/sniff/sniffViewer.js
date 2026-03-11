@@ -2,6 +2,7 @@ const vscode = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : nu
 
 let treeData = [];
 let selectedWidgetId = '';
+let selectedWidgetIds = [];
 let expandedWidgetIds = new Set();
 let errorText = '';
 let contextTargetWidgetId = '';
@@ -33,17 +34,31 @@ const elements = {
     contextMenu: document.getElementById('contextMenu')
 };
 
+ensureBatchCopyContextItem();
+
 function postToExtensionHost(message) {
     if (!vscode || typeof vscode.postMessage !== 'function') {
-        setStatus('bridge 不可用');
+        setStatus('bridge unavailable');
         return;
     }
 
     try {
         vscode.postMessage(message);
     } catch {
-        setStatus('消息发送失败');
+        setStatus('message post failed');
     }
+}
+
+function ensureBatchCopyContextItem() {
+    if (!elements.contextMenu || elements.contextMenu.querySelector('[data-action="batch-copy"]')) {
+        return;
+    }
+
+    const item = document.createElement('div');
+    item.className = 'context-item';
+    item.setAttribute('data-action', 'batch-copy');
+    item.textContent = '批量复制控件定义';
+    elements.contextMenu.appendChild(item);
 }
 
 function getState() {
@@ -62,8 +77,9 @@ function saveState() {
     vscode.setState({
         expandedWidgetIds: Array.from(expandedWidgetIds),
         selectedWidgetId,
-        searchWidgetDefInput: elements.searchWidgetDefInput.value,
-        serverNameInput: elements.serverNameInput.value,
+        selectedWidgetIds,
+        searchWidgetDefInput: elements.searchWidgetDefInput ? elements.searchWidgetDefInput.value : '',
+        serverNameInput: elements.serverNameInput ? elements.serverNameInput.value : '',
         autoRefreshEnabled,
         autoRefreshIntervalSeconds
     });
@@ -75,15 +91,23 @@ function restoreState() {
         expandedWidgetIds = new Set(state.expandedWidgetIds);
     }
 
-    if (typeof state.selectedWidgetId === 'string') {
-        selectedWidgetId = state.selectedWidgetId;
+    if (Array.isArray(state.selectedWidgetIds)) {
+        selectedWidgetIds = state.selectedWidgetIds.filter(widgetId => typeof widgetId === 'string');
+    } else if (typeof state.selectedWidgetId === 'string' && state.selectedWidgetId) {
+        selectedWidgetIds = [state.selectedWidgetId];
     }
 
-    if (typeof state.searchWidgetDefInput === 'string') {
+    if (typeof state.selectedWidgetId === 'string') {
+        selectedWidgetId = state.selectedWidgetId;
+    } else {
+        selectedWidgetId = selectedWidgetIds[selectedWidgetIds.length - 1] || '';
+    }
+
+    if (typeof state.searchWidgetDefInput === 'string' && elements.searchWidgetDefInput) {
         elements.searchWidgetDefInput.value = state.searchWidgetDefInput;
     }
 
-    if (typeof state.serverNameInput === 'string' && state.serverNameInput.trim()) {
+    if (typeof state.serverNameInput === 'string' && state.serverNameInput.trim() && elements.serverNameInput) {
         elements.serverNameInput.value = state.serverNameInput;
     }
 
@@ -145,24 +169,66 @@ function findPathToWidget(nodes, widgetId, parentPath = []) {
     return null;
 }
 
+function findWidgetNode(nodes, widgetId) {
+    for (const node of nodes) {
+        if (node.widgetId === widgetId) {
+            return node;
+        }
+
+        const childNode = findWidgetNode(node.children || [], widgetId);
+        if (childNode) {
+            return childNode;
+        }
+    }
+
+    return null;
+}
+
 function hasWidget(nodes, widgetId) {
     return Boolean(findPathToWidget(nodes, widgetId));
 }
 
-function renderTree() {
-    elements.treeMeta.textContent = `${countNodes(treeData)} nodes`;
-    if (!treeData.length) {
-        elements.treeContainer.innerHTML = '<div class="empty">暂无控件树数据</div>';
+function getLabelByWidgetId(widgetId) {
+    const node = findWidgetNode(treeData, widgetId);
+    return node ? getNodeLabel(node) : widgetId;
+}
+
+function updateSelectionMeta() {
+    if (!selectedWidgetIds.length) {
         setSelectionMeta('未选择控件');
         return;
     }
 
-    elements.treeContainer.innerHTML = treeData.map(node => renderTreeNode(node, 0)).join('');
+    if (selectedWidgetIds.length === 1) {
+        setSelectionMeta(getLabelByWidgetId(selectedWidgetIds[0]));
+        return;
+    }
+
+    setSelectionMeta(`已选中 ${selectedWidgetIds.length} 个控件`);
+}
+
+function renderTree() {
+    if (elements.treeMeta) {
+        elements.treeMeta.textContent = `${countNodes(treeData)} nodes`;
+    }
+
+    if (!treeData.length) {
+        if (elements.treeContainer) {
+            elements.treeContainer.innerHTML = '<div class="empty">暂无控件树数据</div>';
+        }
+        setSelectionMeta('未选择控件');
+        return;
+    }
+
+    if (elements.treeContainer) {
+        elements.treeContainer.innerHTML = treeData.map(node => renderTreeNode(node, 0)).join('');
+    }
 }
 
 function renderTreeNode(node, level) {
     const hasChildren = Array.isArray(node.children) && node.children.length > 0;
     const isExpanded = expandedWidgetIds.has(node.widgetId);
+    const isSelected = selectedWidgetIds.includes(node.widgetId);
     const childrenHtml = hasChildren && isExpanded
         ? node.children.map(child => renderTreeNode(child, level + 1)).join('')
         : '';
@@ -174,7 +240,7 @@ function renderTreeNode(node, level) {
     return `
         <div>
             <div
-                class="tree-item ${selectedWidgetId === node.widgetId ? 'selected' : ''}"
+                class="tree-item ${isSelected ? 'selected' : ''}"
                 data-widget-id="${escapeHtml(node.widgetId)}"
                 data-widget-label="${escapeHtml(getNodeLabel(node))}"
                 data-has-children="${hasChildren ? '1' : '0'}"
@@ -190,7 +256,7 @@ function renderTreeNode(node, level) {
 }
 
 function getRequestedServerName() {
-    return (elements.serverNameInput.value || '').trim() || 'common';
+    return (elements.serverNameInput ? elements.serverNameInput.value : '').trim() || 'common';
 }
 
 function normalizeAutoRefreshInterval(value) {
@@ -231,27 +297,93 @@ function applyServerName() {
     });
 }
 
-function selectWidget(widgetId, label = '') {
-    if (!hasWidget(treeData, widgetId)) {
+function normalizeSelection(widgetIds) {
+    const normalized = [];
+    for (const widgetId of widgetIds) {
+        if (!widgetId || normalized.includes(widgetId) || !hasWidget(treeData, widgetId)) {
+            continue;
+        }
+
+        normalized.push(widgetId);
+    }
+
+    return normalized;
+}
+
+function expandSelection(widgetIds) {
+    for (const widgetId of widgetIds) {
+        const pathToWidget = findPathToWidget(treeData, widgetId) || [];
+        for (const pathWidgetId of pathToWidget) {
+            expandedWidgetIds.add(pathWidgetId);
+        }
+    }
+}
+
+function applySelection(widgetIds, primaryWidgetId, options = {}) {
+    const requestDetails = options.requestDetails !== false;
+    const normalizedWidgetIds = normalizeSelection(widgetIds);
+    const resolvedPrimaryWidgetId = normalizedWidgetIds.includes(primaryWidgetId)
+        ? primaryWidgetId
+        : (normalizedWidgetIds[normalizedWidgetIds.length - 1] || '');
+
+    selectedWidgetIds = normalizedWidgetIds;
+    selectedWidgetId = resolvedPrimaryWidgetId;
+    expandSelection(selectedWidgetIds);
+    saveState();
+    renderTree();
+    updateSelectionMeta();
+
+    if (!requestDetails) {
         return;
     }
 
-    selectedWidgetId = widgetId;
-    const pathToWidget = findPathToWidget(treeData, widgetId) || [];
-    for (const pathWidgetId of pathToWidget) {
-        expandedWidgetIds.add(pathWidgetId);
+    if (!selectedWidgetId) {
+        postToExtensionHost({ command: 'clearSelection' });
+        return;
     }
 
-    saveState();
-    renderTree();
-    setSelectionMeta(label || widgetId);
     postToExtensionHost({
         command: 'selectWidget',
-        widgetId
+        widgetId: selectedWidgetId
     });
 }
 
+function selectSingleWidget(widgetId) {
+    applySelection([widgetId], widgetId, { requestDetails: true });
+}
+
+function toggleWidgetSelection(widgetId) {
+    const isSelected = selectedWidgetIds.includes(widgetId);
+    if (isSelected) {
+        const nextSelectedWidgetIds = selectedWidgetIds.filter(currentWidgetId => currentWidgetId !== widgetId);
+        const nextPrimaryWidgetId = selectedWidgetId === widgetId
+            ? (nextSelectedWidgetIds[nextSelectedWidgetIds.length - 1] || '')
+            : selectedWidgetId;
+        applySelection(nextSelectedWidgetIds, nextPrimaryWidgetId, {
+            requestDetails: selectedWidgetId === widgetId
+        });
+        return;
+    }
+
+    applySelection([...selectedWidgetIds, widgetId], widgetId, { requestDetails: true });
+}
+
+function syncSelectionWithTree() {
+    const validWidgetIds = normalizeSelection(selectedWidgetIds);
+    const primaryWidgetId = validWidgetIds.includes(selectedWidgetId)
+        ? selectedWidgetId
+        : (validWidgetIds[validWidgetIds.length - 1] || '');
+    selectedWidgetIds = validWidgetIds;
+    selectedWidgetId = primaryWidgetId;
+    saveState();
+    updateSelectionMeta();
+}
+
 function highlightWidget(widgetId) {
+    if (!widgetId) {
+        return;
+    }
+
     setStatus('正在高亮控件');
     postToExtensionHost({
         command: 'highlightWidget',
@@ -260,16 +392,25 @@ function highlightWidget(widgetId) {
 }
 
 function renderSearchHint(text) {
-    elements.searchResultsBody.innerHTML = `<div class="empty">${escapeHtml(text)}</div>`;
+    if (elements.searchResultsBody) {
+        elements.searchResultsBody.innerHTML = `<div class="empty">${escapeHtml(text)}</div>`;
+    }
 }
 
 function openSearchModal() {
-    if (!elements.searchResultsBody.innerHTML.trim()) {
+    if (elements.searchResultsBody && !elements.searchResultsBody.innerHTML.trim()) {
         renderSearchHint('输入 widget_def JSON 后开始搜索');
     }
 
-    elements.searchModal.classList.add('visible');
+    if (elements.searchModal) {
+        elements.searchModal.classList.add('visible');
+    }
+
     requestAnimationFrame(() => {
+        if (!elements.searchWidgetDefInput) {
+            return;
+        }
+
         elements.searchWidgetDefInput.focus();
         elements.searchWidgetDefInput.selectionStart = elements.searchWidgetDefInput.value.length;
         elements.searchWidgetDefInput.selectionEnd = elements.searchWidgetDefInput.value.length;
@@ -277,16 +418,20 @@ function openSearchModal() {
 }
 
 function hideSearchModal() {
-    elements.searchModal.classList.remove('visible');
+    if (elements.searchModal) {
+        elements.searchModal.classList.remove('visible');
+    }
 }
 
 function submitSearch() {
-    const rawText = elements.searchWidgetDefInput.value.trim();
+    const rawText = elements.searchWidgetDefInput ? elements.searchWidgetDefInput.value.trim() : '';
     saveState();
 
     if (!rawText) {
         renderSearchHint('请输入 widget_def JSON');
-        elements.searchWidgetDefInput.focus();
+        if (elements.searchWidgetDefInput) {
+            elements.searchWidgetDefInput.focus();
+        }
         return;
     }
 
@@ -310,6 +455,10 @@ function submitSearch() {
 }
 
 function showSearchResults(results) {
+    if (!elements.searchResultsBody) {
+        return;
+    }
+
     if (!results || results.length === 0) {
         renderSearchHint('未找到匹配的控件');
     } else {
@@ -329,199 +478,261 @@ function showError(error) {
         `错误消息: ${error.error || 'Unknown'}`
     ].join('\n') + (error.traceback ? `\n\n${error.traceback}` : '');
 
-    elements.errorBody.innerHTML = `<pre class="json-box">${escapeHtml(errorText)}</pre>`;
-    elements.errorModal.classList.add('visible');
+    if (elements.errorBody) {
+        elements.errorBody.innerHTML = `<pre class="json-box">${escapeHtml(errorText)}</pre>`;
+    }
+    if (elements.errorModal) {
+        elements.errorModal.classList.add('visible');
+    }
     setStatus(`请求失败: ${error.errorType || 'Unknown'}`);
 }
 
 function hideContextMenu() {
-    elements.contextMenu.classList.remove('visible');
+    if (elements.contextMenu) {
+        elements.contextMenu.classList.remove('visible');
+    }
     contextTargetWidgetId = '';
 }
 
-elements.refreshButton.addEventListener('click', () => {
-    const requestedServerName = getRequestedServerName();
-    saveState();
-
-    if (requestedServerName !== activeServerName) {
-        applyServerName();
-        return;
-    }
-
-    setStatus('正在刷新');
-    postToExtensionHost({
-        command: 'refresh',
-        serverName: requestedServerName
-    });
-});
-
-elements.applyServerButton.addEventListener('click', () => {
-    applyServerName();
-});
-
-elements.autoRefreshToggle.addEventListener('change', event => {
-    autoRefreshEnabled = Boolean(event.target.checked);
-    applyAutoRefreshSettings();
-});
-
-elements.autoRefreshIntervalInput.addEventListener('change', event => {
-    autoRefreshIntervalSeconds = normalizeAutoRefreshInterval(event.target.value);
-    applyAutoRefreshSettings();
-});
-
-elements.serverNameInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-        applyServerName();
-    }
-});
-
-elements.findButton.addEventListener('click', () => {
-    openSearchModal();
-});
-
-elements.submitSearchButton.addEventListener('click', () => {
-    submitSearch();
-});
-
-elements.searchWidgetDefInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        submitSearch();
-    }
-});
-
-elements.closeSearchModalButton.addEventListener('click', () => {
-    hideSearchModal();
-});
-
-elements.searchModal.addEventListener('click', event => {
-    if (event.target === elements.searchModal) {
-        hideSearchModal();
-    }
-});
-
-elements.closeErrorModalButton.addEventListener('click', () => {
-    elements.errorModal.classList.remove('visible');
-});
-
-elements.errorModal.addEventListener('click', event => {
-    if (event.target === elements.errorModal) {
-        elements.errorModal.classList.remove('visible');
-    }
-});
-
-elements.copyErrorButton.addEventListener('click', () => {
-    postToExtensionHost({
-        command: 'copyError',
-        text: errorText
-    });
-});
-
-elements.treeContainer.addEventListener('click', event => {
-    hideContextMenu();
-    const item = event.target.closest('.tree-item');
-    if (!item) {
-        return;
-    }
-
-    const widgetId = item.getAttribute('data-widget-id');
-    if (!widgetId) {
-        return;
-    }
-
-    const hasChildren = item.getAttribute('data-has-children') === '1';
-    if (hasChildren && event.target.closest('.twisty')) {
-        if (expandedWidgetIds.has(widgetId)) {
-            expandedWidgetIds.delete(widgetId);
-        } else {
-            expandedWidgetIds.add(widgetId);
-        }
+if (elements.refreshButton) {
+    elements.refreshButton.addEventListener('click', () => {
+        const requestedServerName = getRequestedServerName();
         saveState();
-        renderTree();
-        return;
-    }
 
-    const now = Date.now();
-    const isRepeatedClick = lastTreeClick.widgetId === widgetId && now - lastTreeClick.time < 350;
-    lastTreeClick = { widgetId, time: now };
+        if (requestedServerName !== activeServerName) {
+            applyServerName();
+            return;
+        }
 
-    selectWidget(widgetId, item.getAttribute('data-widget-label') || '');
-    if (isRepeatedClick) {
-        highlightWidget(widgetId);
-    }
-});
-
-elements.treeContainer.addEventListener('dblclick', event => {
-    const item = event.target.closest('.tree-item');
-    if (!item) {
-        return;
-    }
-
-    const widgetId = item.getAttribute('data-widget-id');
-    if (widgetId) {
-        selectWidget(widgetId, item.getAttribute('data-widget-label') || '');
-        highlightWidget(widgetId);
-    }
-});
-
-elements.treeContainer.addEventListener('contextmenu', event => {
-    event.preventDefault();
-    const item = event.target.closest('.tree-item');
-    if (!item) {
-        hideContextMenu();
-        return;
-    }
-
-    const widgetId = item.getAttribute('data-widget-id');
-    if (!widgetId) {
-        return;
-    }
-
-    contextTargetWidgetId = widgetId;
-    if (selectedWidgetId !== widgetId) {
-        selectWidget(widgetId, item.getAttribute('data-widget-label') || '');
-    }
-
-    elements.contextMenu.style.left = `${event.clientX}px`;
-    elements.contextMenu.style.top = `${event.clientY}px`;
-    elements.contextMenu.classList.add('visible');
-});
-
-elements.contextMenu.addEventListener('click', event => {
-    const action = event.target.getAttribute('data-action');
-    if (!action || !contextTargetWidgetId) {
-        return;
-    }
-
-    if (action === 'view') {
-        selectWidget(contextTargetWidgetId);
-    } else if (action === 'highlight') {
-        highlightWidget(contextTargetWidgetId);
-    } else if (action === 'generate') {
+        setStatus('正在刷新');
         postToExtensionHost({
-            command: 'generateWidgetDef',
-            widgetId: contextTargetWidgetId
+            command: 'refresh',
+            serverName: requestedServerName
         });
-    }
+    });
+}
 
-    hideContextMenu();
-});
+if (elements.applyServerButton) {
+    elements.applyServerButton.addEventListener('click', () => {
+        applyServerName();
+    });
+}
 
-elements.searchResultsBody.addEventListener('click', event => {
-    const row = event.target.closest('.result-row');
-    if (!row) {
-        return;
-    }
+if (elements.autoRefreshToggle) {
+    elements.autoRefreshToggle.addEventListener('change', event => {
+        autoRefreshEnabled = Boolean(event.target.checked);
+        applyAutoRefreshSettings();
+    });
+}
 
-    const widgetId = row.getAttribute('data-widget-id');
-    if (!widgetId) {
-        return;
-    }
+if (elements.autoRefreshIntervalInput) {
+    elements.autoRefreshIntervalInput.addEventListener('change', event => {
+        autoRefreshIntervalSeconds = normalizeAutoRefreshInterval(event.target.value);
+        applyAutoRefreshSettings();
+    });
+}
 
-    hideSearchModal();
-    selectWidget(widgetId, row.getAttribute('data-widget-label') || '');
-    highlightWidget(widgetId);
-});
+if (elements.serverNameInput) {
+    elements.serverNameInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            applyServerName();
+        }
+    });
+}
+
+if (elements.findButton) {
+    elements.findButton.addEventListener('click', () => {
+        openSearchModal();
+    });
+}
+
+if (elements.submitSearchButton) {
+    elements.submitSearchButton.addEventListener('click', () => {
+        submitSearch();
+    });
+}
+
+if (elements.searchWidgetDefInput) {
+    elements.searchWidgetDefInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            submitSearch();
+        }
+    });
+}
+
+if (elements.closeSearchModalButton) {
+    elements.closeSearchModalButton.addEventListener('click', () => {
+        hideSearchModal();
+    });
+}
+
+if (elements.searchModal) {
+    elements.searchModal.addEventListener('click', event => {
+        if (event.target === elements.searchModal) {
+            hideSearchModal();
+        }
+    });
+}
+
+if (elements.closeErrorModalButton) {
+    elements.closeErrorModalButton.addEventListener('click', () => {
+        if (elements.errorModal) {
+            elements.errorModal.classList.remove('visible');
+        }
+    });
+}
+
+if (elements.errorModal) {
+    elements.errorModal.addEventListener('click', event => {
+        if (event.target === elements.errorModal) {
+            elements.errorModal.classList.remove('visible');
+        }
+    });
+}
+
+if (elements.copyErrorButton) {
+    elements.copyErrorButton.addEventListener('click', () => {
+        postToExtensionHost({
+            command: 'copyError',
+            text: errorText
+        });
+    });
+}
+
+if (elements.treeContainer) {
+    elements.treeContainer.addEventListener('click', event => {
+        hideContextMenu();
+        const item = event.target.closest('.tree-item');
+        if (!item) {
+            return;
+        }
+
+        const widgetId = item.getAttribute('data-widget-id');
+        if (!widgetId) {
+            return;
+        }
+
+        const hasChildren = item.getAttribute('data-has-children') === '1';
+        if (hasChildren && event.target.closest('.twisty')) {
+            if (expandedWidgetIds.has(widgetId)) {
+                expandedWidgetIds.delete(widgetId);
+            } else {
+                expandedWidgetIds.add(widgetId);
+            }
+            saveState();
+            renderTree();
+            return;
+        }
+
+        const isAdditiveSelection = event.ctrlKey || event.metaKey;
+        const now = Date.now();
+        const isRepeatedClick = !isAdditiveSelection
+            && lastTreeClick.widgetId === widgetId
+            && now - lastTreeClick.time < 350;
+        lastTreeClick = { widgetId, time: now };
+
+        if (isAdditiveSelection) {
+            toggleWidgetSelection(widgetId);
+        } else {
+            selectSingleWidget(widgetId);
+        }
+
+        if (isRepeatedClick) {
+            highlightWidget(widgetId);
+        }
+    });
+
+    elements.treeContainer.addEventListener('dblclick', event => {
+        const item = event.target.closest('.tree-item');
+        if (!item) {
+            return;
+        }
+
+        const widgetId = item.getAttribute('data-widget-id');
+        if (widgetId) {
+            selectSingleWidget(widgetId);
+            highlightWidget(widgetId);
+        }
+    });
+
+    elements.treeContainer.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        const item = event.target.closest('.tree-item');
+        if (!item) {
+            hideContextMenu();
+            return;
+        }
+
+        const widgetId = item.getAttribute('data-widget-id');
+        if (!widgetId) {
+            return;
+        }
+
+        contextTargetWidgetId = widgetId;
+        if (!selectedWidgetIds.includes(widgetId)) {
+            selectSingleWidget(widgetId);
+        }
+
+        if (!elements.contextMenu) {
+            return;
+        }
+
+        elements.contextMenu.style.left = `${event.clientX}px`;
+        elements.contextMenu.style.top = `${event.clientY}px`;
+        elements.contextMenu.classList.add('visible');
+    });
+}
+
+if (elements.contextMenu) {
+    elements.contextMenu.addEventListener('click', event => {
+        const actionElement = event.target.closest('[data-action]');
+        const action = actionElement ? actionElement.getAttribute('data-action') : '';
+        if (!action || !contextTargetWidgetId) {
+            return;
+        }
+
+        if (action === 'view') {
+            const nextSelectedWidgetIds = selectedWidgetIds.includes(contextTargetWidgetId)
+                ? selectedWidgetIds
+                : [contextTargetWidgetId];
+            applySelection(nextSelectedWidgetIds, contextTargetWidgetId, { requestDetails: true });
+        } else if (action === 'highlight') {
+            highlightWidget(contextTargetWidgetId);
+        } else if (action === 'generate') {
+            postToExtensionHost({
+                command: 'generateWidgetDef',
+                widgetId: contextTargetWidgetId
+            });
+        } else if (action === 'batch-copy') {
+            const widgetIds = selectedWidgetIds.length > 0 ? selectedWidgetIds : [contextTargetWidgetId];
+            postToExtensionHost({
+                command: 'copyWidgetDefs',
+                widgetIds
+            });
+        }
+
+        hideContextMenu();
+    });
+}
+
+if (elements.searchResultsBody) {
+    elements.searchResultsBody.addEventListener('click', event => {
+        const row = event.target.closest('.result-row');
+        if (!row) {
+            return;
+        }
+
+        const widgetId = row.getAttribute('data-widget-id');
+        if (!widgetId) {
+            return;
+        }
+
+        hideSearchModal();
+        selectSingleWidget(widgetId);
+        highlightWidget(widgetId);
+    });
+}
 
 window.addEventListener('click', event => {
     if (!event.target.closest('.context-menu')) {
@@ -536,7 +747,9 @@ window.addEventListener('keydown', event => {
 
     hideContextMenu();
     hideSearchModal();
-    elements.errorModal.classList.remove('visible');
+    if (elements.errorModal) {
+        elements.errorModal.classList.remove('visible');
+    }
 });
 
 window.addEventListener('message', event => {
@@ -545,23 +758,19 @@ window.addEventListener('message', event => {
         case 'setTree':
             treeData = message.tree || [];
             activeServerName = String(message.serverName || activeServerName);
-            elements.serverNameInput.value = activeServerName;
+            if (elements.serverNameInput) {
+                elements.serverNameInput.value = activeServerName;
+            }
             if (message.resetState) {
-                expandedWidgetIds.clear();
                 selectedWidgetId = '';
-                setSelectionMeta('未选择控件');
+                selectedWidgetIds = [];
+                expandedWidgetIds.clear();
                 saveState();
+            } else {
+                syncSelectionWithTree();
             }
             renderTree();
-            if (selectedWidgetId) {
-                if (hasWidget(treeData, selectedWidgetId)) {
-                    selectWidget(selectedWidgetId);
-                } else {
-                    selectedWidgetId = '';
-                    setSelectionMeta('未选择控件');
-                    saveState();
-                }
-            }
+            updateSelectionMeta();
             break;
         case 'setStatus':
             setStatus(String(message.text || ''));
@@ -588,8 +797,8 @@ restoreState();
 syncAutoRefreshControls();
 renderTree();
 renderSearchHint('输入 widget_def JSON 后开始搜索');
-setStatus(vscode ? '等待连接' : 'bridge 不可用');
-setSelectionMeta('未选择控件');
+setStatus(vscode ? '等待连接' : 'bridge unavailable');
+updateSelectionMeta();
 postToExtensionHost({
     command: 'ready',
     serverName: getRequestedServerName(),

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { addMethodToFile, getAtomicFilePath } from '../../../shared/python/fileOperations';
 import { generateMethodCode } from '../../../shared/python/codegenUtils';
+import { treeSelectionStore } from '../../../shared/state/treeSelectionStore';
 import { TreeItem } from '../../../shared/tree/treeItem';
 import { loadWebviewHtml } from '../../../shared/webview/loadWebviewHtml';
 import { WebviewElementPayload } from '../models/contracts';
@@ -74,6 +75,17 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'getState':
                     this.postMessage({ command: 'requestState' });
+                    break;
+                case 'selectItem':
+                    treeSelectionStore.setEleTreeSelection({
+                        view: 'eleTree',
+                        path: String(data.item?.fullPath || ''),
+                        label: String(data.item?.label || ''),
+                        codePath: data.item?.codePath ? String(data.item.codePath) : undefined,
+                        filePath: data.item?.eleFilePath ? String(data.item.eleFilePath) : undefined,
+                        lineNumber: typeof data.item?.eleLineNumber === 'number' ? data.item.eleLineNumber : undefined,
+                        eleVariableName: data.item?.eleVariableName ? String(data.item.eleVariableName) : undefined
+                    });
                     break;
             }
         });

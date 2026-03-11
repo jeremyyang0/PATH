@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { createExcludeMatcher } from '../../../shared/path/excludeMatcher';
 import { orderItemsByDirectoryFile } from '../../../shared/path/orderUtils';
-import { ORDER_FILE_NAME } from '../../../shared/path/workspacePathUtils';
+import { isMethodRelatedPath, ORDER_FILE_NAME } from '../../../shared/path/workspacePathUtils';
 import { TreeItem } from '../../../shared/tree/treeItem';
 import { ExcludeConfig } from '../models/contracts';
 
@@ -119,6 +119,7 @@ export class PathFileTreeDataProvider implements vscode.TreeDataProvider<TreeIte
 
         if (entry.isDirectory()) {
             const treeItem = cachedItem ?? new TreeItem(entry.name, vscode.TreeItemCollapsibleState.Collapsed);
+            const isMethodItem = isMethodRelatedPath(fullEntryPath);
             treeItem.label = entry.name;
             treeItem.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
             treeItem.filePath = fullEntryPath;
@@ -126,7 +127,7 @@ export class PathFileTreeDataProvider implements vscode.TreeDataProvider<TreeIte
             treeItem.fullPath = relativePath;
             treeItem.nodeType = 'folder';
             treeItem.isLeaf = false;
-            treeItem.contextValue = 'pathFileTreeFolder';
+            treeItem.contextValue = isMethodItem ? 'pathFileTreeMethodFolder' : 'pathFileTreeFolder';
             treeItem.resourceUri = vscode.Uri.file(fullEntryPath);
             treeItem.command = undefined;
             this.itemCache.set(fullEntryPath, treeItem);
@@ -134,6 +135,7 @@ export class PathFileTreeDataProvider implements vscode.TreeDataProvider<TreeIte
         }
 
         const treeItem = cachedItem ?? new TreeItem(entry.name, vscode.TreeItemCollapsibleState.None);
+        const isMethodItem = isMethodRelatedPath(fullEntryPath);
         treeItem.label = entry.name;
         treeItem.collapsibleState = vscode.TreeItemCollapsibleState.None;
         treeItem.command = {
@@ -146,7 +148,7 @@ export class PathFileTreeDataProvider implements vscode.TreeDataProvider<TreeIte
         treeItem.fullPath = relativePath;
         treeItem.nodeType = 'file';
         treeItem.isLeaf = true;
-        treeItem.contextValue = 'pathFileTreeFile';
+        treeItem.contextValue = isMethodItem ? 'pathFileTreeMethodFile' : 'pathFileTreeFile';
         treeItem.resourceUri = vscode.Uri.file(fullEntryPath);
         this.itemCache.set(fullEntryPath, treeItem);
         return treeItem;

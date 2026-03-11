@@ -367,6 +367,20 @@ function selectItem(treePath) {
     const item = document.querySelector(`[data-path="${escapeHtml(treePath)}"]`);
     if (item) {
         item.classList.add('selected');
+        if (vscode) {
+            vscode.postMessage({
+                command: 'selectItem',
+                item: {
+                    fullPath: treePath,
+                    label: item.querySelector('.tree-label')?.textContent || '',
+                    codePath: item.getAttribute('data-codepath') || '',
+                    methodFilePath: item.getAttribute('data-filepath') || '',
+                    methodLine: parseInt(item.getAttribute('data-line') || '0', 10) || 0,
+                    methodName: item.getAttribute('data-methodname') || '',
+                    methodDoc: item.querySelector('.tree-label')?.textContent || ''
+                }
+            });
+        }
     }
 }
 
