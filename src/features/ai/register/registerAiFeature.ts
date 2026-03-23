@@ -1,30 +1,20 @@
 import * as vscode from 'vscode';
-import { processFileWithAI } from '../services/aiService';
 import { agentService } from '../services/agentService';
 
-async function runGeneration(forceAgent: boolean): Promise<void> {
+async function runGeneration(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-        vscode.window.showWarningMessage('Open a Python test file before running AI generation.');
+        vscode.window.showWarningMessage('Open a Python test file before running Agent Generation.');
         return;
     }
 
-    const agentEnabled = vscode.workspace.getConfiguration('path.ai.agent').get<boolean>('enabled') ?? true;
-    if (forceAgent || agentEnabled) {
-        await agentService.processDocument(editor.document);
-        return;
-    }
-
-    await processFileWithAI(editor.document);
+    await agentService.processDocument(editor.document);
 }
 
 export function registerAiFeature(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
-        vscode.commands.registerCommand('eleTreeViewer.aiGeneration', async () => {
-            await runGeneration(false);
-        }),
         vscode.commands.registerCommand('eleTreeViewer.aiAgentGeneration', async () => {
-            await runGeneration(true);
+            await runGeneration();
         })
     );
 }

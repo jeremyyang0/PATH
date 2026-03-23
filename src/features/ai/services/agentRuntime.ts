@@ -12,7 +12,6 @@ import {
 } from '../models/agentModels';
 
 export interface AgentConfig {
-    enabled: boolean;
     url: string;
     apiKey: string;
     model: string;
@@ -39,7 +38,6 @@ export function getAgentConfig(): AgentConfig {
     const pathConfig = vscode.workspace.getConfiguration('path.ai');
     const agentConfig = vscode.workspace.getConfiguration('path.ai.agent');
     return {
-        enabled: agentConfig.get<boolean>('enabled') ?? true,
         url: pathConfig.get<string>('url') || '',
         apiKey: pathConfig.get<string>('apiKey') || '',
         model: pathConfig.get<string>('model') || '',

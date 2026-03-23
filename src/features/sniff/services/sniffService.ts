@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import { SniffSearchResult, SniffWidgetDefResult, SniffWidgetInfo, SniffWidgetTreeNode } from '../models/sniffModels';
+import {
+    SniffSearchResult,
+    SniffWidgetAtPointResult,
+    SniffWidgetDefResult,
+    SniffWidgetInfo,
+    SniffWidgetTreeNode
+} from '../models/sniffModels';
 import { SniffClient } from './sniffClient';
 
 type SniffTreeResponse = {
@@ -38,6 +44,10 @@ export class SniffService {
         await this.client.highlightWidget(widgetId);
     }
 
+    public async activateApplicationWindow(): Promise<void> {
+        await this.client.activateApplicationWindow();
+    }
+
     public async searchWidgets(widgetDef: Record<string, unknown>): Promise<SniffSearchResult[]> {
         const response = await this.client.searchWidget(widgetDef);
         return response.map(item => ({
@@ -54,6 +64,25 @@ export class SniffService {
             widgetDef: response.widget_def || {},
             matchCount: response.match_count || 1,
             occurrence: response.occurrence || 1
+        };
+    }
+
+    public async findWidgetByPoint(
+        x: number,
+        y: number,
+        refresh = false
+    ): Promise<SniffWidgetAtPointResult> {
+        const response = await this.client.findWidgetByPoint(x, y, refresh);
+        return {
+            found: Boolean(response.found),
+            point: response.point || [x, y],
+            widgetId: response.widget_id || '',
+            type: response.type || '',
+            name: response.name || '',
+            text: response.text || '',
+            widgetModel: response.widget_model || '',
+            position: response.position || [-1, -1],
+            size: response.size || [0, 0]
         };
     }
 

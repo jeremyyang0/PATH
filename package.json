@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python 自动化测试辅助插件，提供元素树、方法树、PATH 文件树和 AI 代码生成功能",
-  "version": "2.2.6",
+  "version": "2.3.1",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -232,6 +232,18 @@
         "title": "双击"
       },
       {
+        "command": "eleTreeViewer.generateClickMethodsForEleFile",
+        "title": "生成点击方法"
+      },
+      {
+        "command": "eleTreeViewer.generateClickForEleProperty",
+        "title": "生成点击"
+      },
+      {
+        "command": "eleTreeViewer.generateDoubleClickForEleProperty",
+        "title": "生成双击"
+      },
+      {
         "command": "eleTreeViewer.openFile",
         "title": "打开文件并跳转到行"
       },
@@ -261,12 +273,8 @@
         "title": "Debug Markrunner"
       },
       {
-        "command": "eleTreeViewer.aiGeneration",
-        "title": "AI Generation"
-      },
-      {
         "command": "eleTreeViewer.aiAgentGeneration",
-        "title": "AI Agent Generation"
+        "title": "Agent Generation"
       }
     ],
     "menus": {
@@ -432,14 +440,14 @@
           "when": "resourceLangId == python && resourceFilename =~ /^test_.+\\.py$/"
         },
         {
-          "command": "eleTreeViewer.aiGeneration",
+          "command": "eleTreeViewer.aiAgentGeneration",
           "group": "navigation",
           "when": "resourceLangId == python && resourceFilename =~ /^test_.+\\.py$/"
         },
         {
-          "command": "eleTreeViewer.aiAgentGeneration",
+          "command": "eleTreeViewer.generateClickMethodsForEleFile",
           "group": "navigation",
-          "when": "resourceLangId == python && resourceFilename =~ /^test_.+\\.py$/"
+          "when": "resourceLangId == python && resourceFilename =~ /^.+_ele\\.py$/"
         }
       ]
     },
@@ -536,11 +544,6 @@
           "default": false,
           "description": "记录 AI 对话过程"
         },
-        "path.ai.agent.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "启用 PATH Agent 版 AI Generation"
-        },
         "path.ai.agent.maxTurns": {
           "type": "number",
           "default": 80,
@@ -616,7 +619,18 @@
           "type": "number",
           "default": 5000,
           "minimum": 1,
-          "description": "PATH Sniff client 璇锋眰瓒呮椂鏃堕棿锛屽崟浣嶄负姣銆?"
+          "description": "PATH Sniff client 超时时间"
+        },
+        "path.sniff.sidecar.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error"
+          ],
+          "description": "Sniff sidecar 日志级别。"
         }
       }
     }
@@ -624,6 +638,7 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
+    "build:sniff-sidecar": "python .\\tools\\pathsniff-sidecar\\build_sidecar.py --output-root .\\resources\\sniff-sidecar",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts"

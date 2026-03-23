@@ -10,6 +10,8 @@ let activeServerName = 'common';
 let lastTreeClick = { widgetId: '', time: 0 };
 let autoRefreshEnabled = false;
 let autoRefreshIntervalSeconds = 5;
+let pickInProgress = false;
+let ctrlMultiSelectActive = false;
 
 const elements = {
     treeContainer: document.getElementById('treeContainer'),
@@ -21,6 +23,7 @@ const elements = {
     autoRefreshToggle: document.getElementById('autoRefreshToggle'),
     autoRefreshIntervalInput: document.getElementById('autoRefreshIntervalInput'),
     refreshButton: document.getElementById('refreshButton'),
+    pickButton: document.getElementById('pickButton'),
     findButton: document.getElementById('findButton'),
     searchModal: document.getElementById('searchModal'),
     searchWidgetDefInput: document.getElementById('searchWidgetDefInput'),
@@ -207,6 +210,37 @@ function updateSelectionMeta() {
     setSelectionMeta(`已选中 ${selectedWidgetIds.length} 个控件`);
 }
 
+function findTreeItemElement(widgetId) {
+    if (!elements.treeContainer || !widgetId) {
+        return null;
+    }
+
+    const items = elements.treeContainer.querySelectorAll('.tree-item');
+    for (const item of items) {
+        if (item.getAttribute('data-widget-id') === widgetId) {
+            return item;
+        }
+    }
+
+    return null;
+}
+
+function revealWidgetInTree(widgetId) {
+    if (!widgetId) {
+        return;
+    }
+
+    requestAnimationFrame(() => {
+        const item = findTreeItemElement(widgetId);
+        if (item) {
+            item.scrollIntoView({
+                block: 'center',
+                inline: 'nearest'
+            });
+        }
+    });
+}
+
 function renderTree() {
     if (elements.treeMeta) {
         elements.treeMeta.textContent = `${countNodes(treeData)} nodes`;
@@ -278,6 +312,16 @@ function syncAutoRefreshControls() {
     }
 }
 
+function syncPickControls() {
+    if (!elements.pickButton) {
+        return;
+    }
+
+    elements.pickButton.disabled = pickInProgress;
+    elements.pickButton.title = pickInProgress ? '拾取进行中' : '拾取控件';
+    elements.pickButton.setAttribute('aria-label', pickInProgress ? '拾取进行中' : '拾取控件');
+}
+
 function applyAutoRefreshSettings() {
     syncAutoRefreshControls();
     saveState();
@@ -321,6 +365,7 @@ function expandSelection(widgetIds) {
 
 function applySelection(widgetIds, primaryWidgetId, options = {}) {
     const requestDetails = options.requestDetails !== false;
+    const revealPrimaryWidget = options.revealPrimaryWidget === true;
     const normalizedWidgetIds = normalizeSelection(widgetIds);
     const resolvedPrimaryWidgetId = normalizedWidgetIds.includes(primaryWidgetId)
         ? primaryWidgetId
@@ -331,6 +376,9 @@ function applySelection(widgetIds, primaryWidgetId, options = {}) {
     expandSelection(selectedWidgetIds);
     saveState();
     renderTree();
+    if (revealPrimaryWidget && selectedWidgetId) {
+        revealWidgetInTree(selectedWidgetId);
+    }
     updateSelectionMeta();
 
     if (!requestDetails) {
@@ -546,6 +594,21 @@ if (elements.findButton) {
     });
 }
 
+if (elements.pickButton) {
+    elements.pickButton.addEventListener('click', () => {
+        if (pickInProgress) {
+            return;
+        }
+
+        setStatus('正在准备拾取');
+        saveState();
+        postToExtensionHost({
+            command: 'pickWidget',
+            serverName: getRequestedServerName()
+        });
+    });
+}
+
 if (elements.submitSearchButton) {
     elements.submitSearchButton.addEventListener('click', () => {
         submitSearch();
@@ -625,7 +688,7 @@ if (elements.treeContainer) {
             return;
         }
 
-        const isAdditiveSelection = event.ctrlKey || event.metaKey;
+        const isAdditiveSelection = ctrlMultiSelectActive || event.ctrlKey || event.metaKey;
         const now = Date.now();
         const isRepeatedClick = !isAdditiveSelection
             && lastTreeClick.widgetId === widgetId
@@ -741,6 +804,10 @@ window.addEventListener('click', event => {
 });
 
 window.addEventListener('keydown', event => {
+    if (event.key === 'Control') {
+        ctrlMultiSelectActive = true;
+    }
+
     if (event.key !== 'Escape') {
         return;
     }
@@ -750,6 +817,16 @@ window.addEventListener('keydown', event => {
     if (elements.errorModal) {
         elements.errorModal.classList.remove('visible');
     }
+});
+
+window.addEventListener('keyup', event => {
+    if (event.key === 'Control') {
+        ctrlMultiSelectActive = false;
+    }
+});
+
+window.addEventListener('blur', () => {
+    ctrlMultiSelectActive = false;
 });
 
 window.addEventListener('message', event => {
@@ -784,6 +861,16 @@ window.addEventListener('message', event => {
             syncAutoRefreshControls();
             saveState();
             break;
+        case 'setPickState':
+            pickInProgress = Boolean(message.inProgress);
+            syncPickControls();
+            break;
+        case 'applyExternalSelection':
+            applySelection(message.widgetIds || [], String(message.primaryWidgetId || ''), {
+                requestDetails: false,
+                revealPrimaryWidget: true
+            });
+            break;
         case 'setSearchResults':
             showSearchResults(message.results || []);
             break;
@@ -795,6 +882,7 @@ window.addEventListener('message', event => {
 
 restoreState();
 syncAutoRefreshControls();
+syncPickControls();
 renderTree();
 renderSearchHint('输入 widget_def JSON 后开始搜索');
 setStatus(vscode ? '等待连接' : 'bridge unavailable');

@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
-import { addMethodToFile, getAtomicFilePath } from '../../../shared/python/fileOperations';
-import { generateMethodCode } from '../../../shared/python/codegenUtils';
+import {
+    generateOperationsForElements,
+    getOperationDisplayName,
+    revealGeneratedMethod
+} from '../../../shared/python/eleOperationService';
 import { treeSelectionStore } from '../../../shared/state/treeSelectionStore';
 import { TreeItem } from '../../../shared/tree/treeItem';
 import { loadWebviewHtml } from '../../../shared/webview/loadWebviewHtml';
@@ -244,73 +247,29 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
-        let successCount = 0;
-        let skipCount = 0;
-        let errorCount = 0;
-        const elementsByFile: Record<string, WebviewElementPayload[]> = {};
+        const targets = elements
+            .filter(element => element.eleFilePath && element.eleVariableName)
+            .map(element => ({
+                eleFilePath: String(element.eleFilePath),
+                eleVariableName: String(element.eleVariableName),
+                label: String(element.label || element.eleVariableName || 'unknown')
+            }));
 
-        for (const element of elements) {
-            const eleFilePath = element.eleFilePath || '';
-            if (!eleFilePath) {
-                continue;
-            }
-
-            const atomicFilePath = getAtomicFilePath(eleFilePath);
-            if (!atomicFilePath) {
-                continue;
-            }
-
-            if (!elementsByFile[atomicFilePath]) {
-                elementsByFile[atomicFilePath] = [];
-            }
-            elementsByFile[atomicFilePath].push(element);
-        }
-
-        for (const [atomicFilePath, fileElements] of Object.entries(elementsByFile)) {
-            for (const element of fileElements) {
-                for (const opType of operationTypes) {
-                    try {
-                        const variableName = String(element.eleVariableName || '');
-                        const eleDesc = String(element.label || element.eleVariableName || 'unknown');
-                        const { methodName, methodCode } = generateMethodCode(variableName, opType, eleDesc);
-                        const result = await addMethodToFile(
-                            atomicFilePath,
-                            methodCode,
-                            String(element.eleFilePath || ''),
-                            methodName
-                        );
-
-                        if (result.existed) {
-                            skipCount++;
-                        } else {
-                            successCount++;
-                        }
-                    } catch (error) {
-                        console.error('Error generating method:', error);
-                        errorCount++;
-                    }
-                }
-            }
-        }
-
-        const filePaths = Object.keys(elementsByFile);
-        if (filePaths.length > 0) {
-            const lastFilePath = filePaths[filePaths.length - 1];
-            if (lastFilePath) {
-                const document = await vscode.workspace.openTextDocument(lastFilePath);
-                await vscode.window.showTextDocument(document);
-            }
+        const result = await generateOperationsForElements(targets, operationTypes);
+        const lastResult = result.results[result.results.length - 1];
+        if (lastResult) {
+            await revealGeneratedMethod(lastResult);
         }
 
         const opName = operationType === 'all'
-            ? '点击和双击'
-            : (operationType === 'click' ? '点击' : '双击');
-        let message = `批量生成完成: ${successCount} 个${opName}方法已生成`;
-        if (skipCount > 0) {
-            message += `, ${skipCount} 个已存在`;
+            ? `${getOperationDisplayName('click')}和${getOperationDisplayName('double_click')}`
+            : getOperationDisplayName(operationType as 'click' | 'double_click');
+        let message = `批量生成完成: ${result.successCount} 个${opName}方法已生成`;
+        if (result.skipCount > 0) {
+            message += `, ${result.skipCount} 个已存在`;
         }
-        if (errorCount > 0) {
-            message += `, ${errorCount} 个失败`;
+        if (result.errorCount > 0) {
+            message += `, ${result.errorCount} 个失败`;
         }
         vscode.window.showInformationMessage(message);
     }

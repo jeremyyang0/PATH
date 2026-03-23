@@ -36,6 +36,21 @@ type SniffInfoResponse = Record<string, unknown> & {
     traceback?: string;
 };
 
+type SniffWidgetAtPointResponse = {
+    found?: boolean;
+    point?: [number, number];
+    widget_id?: string;
+    type?: string;
+    name?: string;
+    text?: string;
+    widget_model?: string;
+    position?: [number, number];
+    size?: [number, number];
+    error?: string;
+    error_type?: string;
+    traceback?: string;
+};
+
 function throwIfError(response: { error?: string; error_type?: string; traceback?: string }): void {
     if (response.error) {
         throw new StructuredError({
@@ -128,6 +143,35 @@ export class SniffClient {
         const response = await this.transport.post<SniffWidgetDefResponse>(this.serverName, this.getRoutePath('generate_widget_def'), {
             widget_id: widgetId
         }, this.getRequestOptions());
+        throwIfError(response);
+        return response;
+    }
+
+    public async activateApplicationWindow(): Promise<void> {
+        const response = await this.transport.post<{ success?: boolean; error?: string; error_type?: string; traceback?: string }>(
+            this.serverName,
+            this.getRoutePath('activate_application_window'),
+            undefined,
+            this.getRequestOptions()
+        );
+        throwIfError(response);
+    }
+
+    public async findWidgetByPoint(
+        x: number,
+        y: number,
+        refresh = false
+    ): Promise<SniffWidgetAtPointResponse> {
+        const response = await this.transport.post<SniffWidgetAtPointResponse>(
+            this.serverName,
+            this.getRoutePath('find_widget_by_point'),
+            {
+                x,
+                y,
+                refresh
+            },
+            this.getRequestOptions()
+        );
         throwIfError(response);
         return response;
     }

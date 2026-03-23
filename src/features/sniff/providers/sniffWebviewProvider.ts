@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { StructuredError } from '../../../shared/errors/structuredError';
 import { loadWebviewHtml } from '../../../shared/webview/loadWebviewHtml';
 import { SniffWidgetTreeNode } from '../models/sniffModels';
+import { SniffSidecarService } from '../services/sniffSidecarService';
 import { SniffService } from '../services/sniffService';
 import { SniffWidgetDefCopyService } from '../services/sniffWidgetDefCopyService';
 import { SniffViewStateStore } from '../services/sniffViewStateStore';
@@ -20,12 +21,16 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
     private autoRefreshIntervalSeconds = SniffWebviewProvider.defaultAutoRefreshIntervalSeconds;
     private autoRefreshTimer?: NodeJS.Timeout;
     private refreshInProgress = false;
+    private pickInProgress = false;
     private readonly copyService = new SniffWidgetDefCopyService();
+    private readonly sidecarService: SniffSidecarService;
 
     public constructor(
         private readonly extensionUri: vscode.Uri,
         private readonly stateStore: SniffViewStateStore
-    ) {}
+    ) {
+        this.sidecarService = new SniffSidecarService(this.extensionUri.fsPath);
+    }
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -53,6 +58,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
                     }
                     this.pushTreeState();
                     this.pushAutoRefreshState();
+                    this.pushPickState();
                     void this.refresh(String(data.serverName || this.currentServerName), false);
                     break;
                 case 'refresh':
@@ -64,6 +70,9 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'setServerName':
                     void this.refresh(String(data.serverName || this.currentServerName), true);
+                    break;
+                case 'pickWidget':
+                    void this.pickWidget(String(data.serverName || this.currentServerName));
                     break;
                 case 'selectWidget':
                     void this.selectWidget(String(data.widgetId || ''));
@@ -99,6 +108,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
 
         setTimeout(() => {
             this.pushTreeState();
+            this.pushPickState();
             void this.refresh(this.currentServerName, false);
         }, 300);
     }
@@ -128,20 +138,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
             );
 
             this.stateStore.setServerName(this.currentServerName);
-            this.stateStore.setTree(tree);
-
-            const selectedWidgetId = this.stateStore.getDetailsState().selectedWidgetId;
-            if (selectedWidgetId && !this.containsWidget(tree, selectedWidgetId)) {
-                this.log(`Selected widget disappeared after refresh. widgetId=${selectedWidgetId}`);
-                this.stateStore.clearSelection();
-            }
-
-            this.postMessage({
-                command: 'setTree',
-                tree,
-                serverName: this.currentServerName,
-                resetState: resetState && serverChanged
-            });
+            this.syncTreeState(tree, resetState && serverChanged);
         }).finally(() => {
             this.refreshInProgress = false;
         });
@@ -164,22 +161,60 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
         }
 
         await this.run(async () => {
-            this.stateStore.setSelection(widgetId);
-            const [widgetInfo, widgetDef] = await Promise.all([
-                this.service.getWidgetInfo(widgetId),
-                this.service.generateWidgetDef(widgetId)
-            ]);
-            this.log(
-                `Widget selected. widgetId=${widgetId}, ` +
-                `propertyCount=${Object.keys(widgetInfo.properties).length}, matchCount=${widgetDef.matchCount}`
-            );
-            this.stateStore.setWidgetInfo(widgetId, widgetInfo.properties);
-            this.stateStore.setWidgetDef(widgetId, widgetDef.widgetDef, widgetDef.matchCount, widgetDef.occurrence);
+            await this.loadWidgetDetails(widgetId);
         });
     }
 
     private clearSelection(): void {
         this.stateStore.clearSelection();
+    }
+
+    private async pickWidget(serverName: string): Promise<void> {
+        if (this.pickInProgress) {
+            return;
+        }
+
+        this.pickInProgress = true;
+        this.pushPickState();
+
+        await this.run(async () => {
+            const serverChanged = this.updateServerName(serverName);
+            if (serverChanged) {
+                this.pushTreeState();
+            }
+
+            this.log(`Starting sniff sidecar pick. serverName=${this.currentServerName}`);
+            this.setStatus(`正在启动 Sniff sidecar 并准备拾取 ${this.currentServerName}...`);
+
+            const pickResult = await this.sidecarService.pickWidget(this.currentServerName);
+            if (pickResult.status === 'cancelled') {
+                this.log('Widget picker cancelled by user.');
+                this.setStatus('已取消拾取');
+                return;
+            }
+
+            this.log(
+                `Widget picked. count=${pickResult.widgetIds.length}, primaryWidgetId=${pickResult.primaryWidgetId}, ` +
+                `point=${pickResult.point[0]},${pickResult.point[1]}`
+            );
+
+            const latestTree = await this.service.refreshTree();
+            this.syncTreeState(latestTree, false);
+            await this.loadWidgetDetails(pickResult.primaryWidgetId);
+            this.postMessage({
+                command: 'applyExternalSelection',
+                widgetIds: pickResult.widgetIds,
+                primaryWidgetId: pickResult.primaryWidgetId
+            });
+            this.setStatus(
+                pickResult.widgetIds.length > 1
+                    ? `已拾取 ${pickResult.widgetIds.length} 个控件`
+                    : `已拾取控件 ${pickResult.primaryWidgetId}`
+            );
+        }).finally(() => {
+            this.pickInProgress = false;
+            this.pushPickState();
+        });
     }
 
     private async highlightWidget(widgetId: string): Promise<void> {
@@ -294,6 +329,13 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
         });
     }
 
+    private pushPickState(): void {
+        this.postMessage({
+            command: 'setPickState',
+            inProgress: this.pickInProgress
+        });
+    }
+
     private postMessage(message: Record<string, unknown>): void {
         if (this.view) {
             void this.view.webview.postMessage(message);
@@ -320,6 +362,37 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider {
         this.stateStore.setServerName(this.currentServerName);
         this.stateStore.clearSelection();
         return true;
+    }
+
+    private async loadWidgetDetails(widgetId: string): Promise<void> {
+        this.stateStore.setSelection(widgetId);
+        const [widgetInfo, widgetDef] = await Promise.all([
+            this.service.getWidgetInfo(widgetId),
+            this.service.generateWidgetDef(widgetId)
+        ]);
+        this.log(
+            `Widget selected. widgetId=${widgetId}, ` +
+            `propertyCount=${Object.keys(widgetInfo.properties).length}, matchCount=${widgetDef.matchCount}`
+        );
+        this.stateStore.setWidgetInfo(widgetId, widgetInfo.properties);
+        this.stateStore.setWidgetDef(widgetId, widgetDef.widgetDef, widgetDef.matchCount, widgetDef.occurrence);
+    }
+
+    private syncTreeState(tree: SniffWidgetTreeNode[], resetState: boolean): void {
+        this.stateStore.setTree(tree);
+
+        const selectedWidgetId = this.stateStore.getDetailsState().selectedWidgetId;
+        if (selectedWidgetId && !this.containsWidget(tree, selectedWidgetId)) {
+            this.log(`Selected widget disappeared after refresh. widgetId=${selectedWidgetId}`);
+            this.stateStore.clearSelection();
+        }
+
+        this.postMessage({
+            command: 'setTree',
+            tree,
+            serverName: this.currentServerName,
+            resetState
+        });
     }
 
     private updateAutoRefreshState(enabled: boolean, intervalSeconds: number): void {

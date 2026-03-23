@@ -13,7 +13,7 @@ export interface AgentRequest {
 }
 
 export interface AgentMessage {
-    role: 'system' | 'user' | 'assistant' | 'tool';
+    role: 'system' | 'user' | 'assistant';
     content: string;
 }
 

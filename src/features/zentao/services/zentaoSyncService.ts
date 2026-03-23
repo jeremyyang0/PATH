@@ -1,6 +1,6 @@
 
 import * as vscode from 'vscode';
-import { parseStepsFromFile } from '../../ai/services/aiService';
+import { parseStepsFromFile } from '../../ai/services/stepParserService';
 import { getCaseInfo, updateCase } from './zentaoService';
 
 function stripIndex(text: string): string {

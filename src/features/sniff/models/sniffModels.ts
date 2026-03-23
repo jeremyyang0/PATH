@@ -22,3 +22,15 @@ export interface SniffWidgetDefResult {
     matchCount: number;
     occurrence: number;
 }
+
+export interface SniffWidgetAtPointResult {
+    found: boolean;
+    point: [number, number];
+    widgetId: string;
+    type: string;
+    name: string;
+    text: string;
+    widgetModel: string;
+    position: [number, number];
+    size: [number, number];
+}

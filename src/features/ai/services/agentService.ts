@@ -77,7 +77,7 @@ export class AgentService {
                 permissionMode: 'propose_only'
             }, config.maxTurns);
             agentPanelStateStore.fail('Missing PATH AI configuration: url, apiKey, or model.');
-            vscode.window.showWarningMessage('Configure PATH AI url, apiKey, and model before running AI Agent Generation.');
+            vscode.window.showWarningMessage('Configure PATH AI url, apiKey, and model before running Agent Generation.');
             return;
         }
 
@@ -355,14 +355,17 @@ export class AgentService {
 
                 session.messages.push({ role: 'assistant', content: JSON.stringify(parsedResponse, null, 2) });
                 session.messages.push({
-                    role: 'tool',
-                    content: JSON.stringify(executedCalls.map(toolCall => ({
-                        tool: toolCall.toolName,
-                        status: toolCall.status,
-                        summary: toolCall.summary,
-                        error: toolCall.error,
-                        result: toolCall.result
-                    })), null, 2)
+                    role: 'user',
+                    content: [
+                        '以下是你刚才请求的工具执行结果(JSON)。请基于这些结果继续决策；如果信息仍不足，就继续返回 type="tool_call"。',
+                        JSON.stringify(executedCalls.map(toolCall => ({
+                            tool: toolCall.toolName,
+                            status: toolCall.status,
+                            summary: toolCall.summary,
+                            error: toolCall.error,
+                            result: toolCall.result
+                        })), null, 2)
+                    ].join('\n')
                 });
 
                 if (executedCalls.every(toolCall => toolCall.status === 'failed')) {

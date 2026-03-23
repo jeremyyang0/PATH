@@ -74,12 +74,14 @@ function buildEleFile(pascalName: string): string {
 function buildMethodFile(parentDirectoryPath: string, branchName: string, pascalName: string): string {
     return [
         `from ${buildMethodModulePath(path.join(parentDirectoryPath, branchName, `${branchName}_ele.py`))} import ${pascalName}Ele`,
+        'from richlogger import auto_logger',
         '',
         '',
         `class _Base${pascalName}Method(${pascalName}Ele):`,
         '    """原子方法"""',
         '',
         '',
+        '@auto_logger',
         `class ${pascalName}Method(_Base${pascalName}Method):`,
         '    """组合方法"""',
         ''

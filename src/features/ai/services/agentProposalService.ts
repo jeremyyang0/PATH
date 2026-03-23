@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { parseStepsFromFile } from './aiService';
+import { parseStepsFromFile } from './stepParserService';
 import { agentMethodSearchService } from './agentMethodSearchService';
 import {
     AgentMethodCandidate,
@@ -68,14 +68,6 @@ function formatProposalArgs(args: unknown): string {
     const entries = Object.entries(args as Record<string, unknown>);
     if (entries.length === 0) {
         return '';
-    }
-
-    const numericEntries = entries
-        .filter(([key]) => /^\d+$/.test(key))
-        .sort((left, right) => Number(left[0]) - Number(right[0]));
-
-    if (numericEntries.length === entries.length) {
-        return numericEntries.map(([, value]) => toPythonLiteral(value)).join(', ');
     }
 
     return entries
@@ -309,7 +301,23 @@ async function resolveCallWithArguments(
         return { call, missingArgs: [] };
     }
 
-    const existingArgs = { ...(call.args || {}) };
+    const rawArgs = { ...(call.args || {}) };
+    const existingArgs: Record<string, string> = {};
+    const numericArgs = Object.entries(rawArgs)
+        .filter(([key]) => /^\d+$/.test(key))
+        .sort((left, right) => Number(left[0]) - Number(right[0]));
+
+    for (const [indexKey, value] of numericArgs) {
+        const parameter = parameters[Number(indexKey)];
+        if (parameter) {
+            existingArgs[parameter.name] = value;
+        }
+    }
+
+    for (const [key, value] of Object.entries(rawArgs).filter(([key]) => !/^\d+$/.test(key))) {
+        existingArgs[key] = value;
+    }
+
     const unresolvedParameters = parameters.filter(parameter => !existingArgs[parameter.name]);
     for (const parameter of unresolvedParameters) {
         const inferredValue = inferArgumentValue(parameter.name, contextText, unresolvedParameters.length);
@@ -325,10 +333,24 @@ async function resolveCallWithArguments(
         return { missingArgs: unresolvedArgs };
     }
 
+    const orderedArgs: Record<string, string> = {};
+    for (const parameter of parameters) {
+        const value = existingArgs[parameter.name];
+        if (value !== undefined) {
+            orderedArgs[parameter.name] = value;
+        }
+    }
+
+    for (const [key, value] of Object.entries(existingArgs)) {
+        if (!(key in orderedArgs)) {
+            orderedArgs[key] = value;
+        }
+    }
+
     return {
         call: {
             ...call,
-            args: Object.keys(existingArgs).length > 0 ? existingArgs : undefined
+            args: Object.keys(orderedArgs).length > 0 ? orderedArgs : undefined
         },
         missingArgs: []
     };
