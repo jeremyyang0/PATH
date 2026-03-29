@@ -26,6 +26,9 @@ export function registerPathFileTreeFeature(context: vscode.ExtensionContext): P
         vscode.commands.registerCommand('pathFileTree.refresh', () => {
             commandService.refresh();
         }),
+        vscode.commands.registerCommand('pathFileTree.createCase', async (element?: TreeItem) => {
+            await commandService.createCaseForItem(element);
+        }),
         vscode.commands.registerCommand('pathFileTree.openItem', async (element: TreeItem) => {
             await commandService.openItem(element);
         }),
@@ -64,9 +67,6 @@ export function registerPathFileTreeFeature(context: vscode.ExtensionContext): P
         }),
         vscode.commands.registerCommand('pathFileTree.findInFolder', async (element?: TreeItem) => {
             await commandService.findInFolder(element);
-        }),
-        vscode.commands.registerCommand('pathFileTree.createCase', async (element?: TreeItem) => {
-            await commandService.createCaseForItem(element);
         })
     );
 

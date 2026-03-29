@@ -48,21 +48,27 @@ function resolvePropertyFromDocument(document: vscode.TextDocument, hint?: Parse
 }
 
 /**
+ * 统一解析当前编辑器中的目标元素，供 CodeLens 跳树和生成方法共用。
+ */
+export async function resolveElePropertyFromEditor(hint?: ParsedEleProperty): Promise<ParsedEleProperty | undefined> {
+    const document = await resolveEleDocument(hint ? vscode.Uri.file(hint.eleFilePath) : undefined);
+    if (!document) {
+        return undefined;
+    }
+
+    return resolvePropertyFromDocument(document, hint);
+}
+
+/**
  * 为当前属性生成点击或双击方法。
  */
 export async function generateOperationForEleProperty(
     operationType: 'click' | 'double_click',
     hint?: ParsedEleProperty
 ): Promise<void> {
-    const document = await resolveEleDocument(hint ? vscode.Uri.file(hint.eleFilePath) : undefined);
-    if (!document) {
-        vscode.window.showWarningMessage('请先打开 `_ele.py` 元素定义文件。');
-        return;
-    }
-
-    const property = resolvePropertyFromDocument(document, hint);
+    const property = await resolveElePropertyFromEditor(hint);
     if (!property) {
-        vscode.window.showWarningMessage('当前属性无法识别为可生成方法的元素定义。');
+        vscode.window.showWarningMessage('请先打开 `_ele.py` 元素定义文件。');
         return;
     }
 

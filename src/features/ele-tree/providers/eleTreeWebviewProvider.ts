@@ -7,7 +7,7 @@ import {
 import { treeSelectionStore } from '../../../shared/state/treeSelectionStore';
 import { TreeItem } from '../../../shared/tree/treeItem';
 import { loadWebviewHtml } from '../../../shared/webview/loadWebviewHtml';
-import { WebviewElementPayload } from '../models/contracts';
+import { EleTreeRevealTarget, WebviewElementPayload } from '../models/contracts';
 import { EleTreeDataProvider } from './eleTreeDataProvider';
 
 export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
@@ -17,6 +17,7 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
     private readonly dataProvider = new EleTreeDataProvider();
     private isFirstLaunch = true;
     private hasReceivedReady = false;
+    private pendingRevealTarget?: EleTreeRevealTarget;
 
     public constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -95,7 +96,7 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
 
         setTimeout(() => {
             this.postMessage({ command: 'debugStatus', text: '扩展正在主动推送 Ele Tree 数据' });
-            void this.loadData();
+            void this.loadData().then(() => this.revealPendingTargetIfPossible());
         }, 300);
 
         setTimeout(() => {
@@ -113,13 +114,32 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
                 return;
             }
 
-            void this.handleRefresh();
+            void this.handleRefresh().then(() => this.revealPendingTargetIfPossible());
             this.postMessage({ command: 'restoreState' });
         });
     }
 
     public refresh(): void {
         void this.handleRefresh();
+    }
+
+    /**
+     * 聚焦元素树视图并把指定元素展开、选中到前端树中。
+     */
+    public async revealElementInTree(target: EleTreeRevealTarget): Promise<void> {
+        this.pendingRevealTarget = {
+            eleFilePath: target.eleFilePath,
+            eleVariableName: target.eleVariableName,
+            eleLineNumber: target.eleLineNumber
+        };
+
+        await this.focusView();
+        if (!this.view || !this.hasReceivedReady) {
+            return;
+        }
+
+        await this.loadData();
+        await this.revealPendingTargetIfPossible();
     }
 
     private postMessage(message: Record<string, unknown>): void {
@@ -189,6 +209,42 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
         await this.loadData();
     }
 
+    /**
+     * 如果搜索把目标元素过滤掉，则先恢复完整树，再下发前端展开消息。
+     */
+    private async revealPendingTargetIfPossible(): Promise<void> {
+        if (!this.pendingRevealTarget || !this.view || !this.hasReceivedReady) {
+            return;
+        }
+
+        const revealTarget = this.pendingRevealTarget;
+        const visibleItem = this.dataProvider.findElementItem(revealTarget, 'current');
+        const fullItem = visibleItem ?? this.dataProvider.findElementItem(revealTarget, 'original');
+
+        if (!visibleItem && fullItem && this.dataProvider.hasActiveSearch()) {
+            this.dataProvider.clearSearch();
+            this.postMessage({ command: 'clearSearchState' });
+            await this.pushCurrentData();
+        }
+
+        const finalItem = this.dataProvider.findElementItem(revealTarget, 'current');
+        if (!finalItem) {
+            this.pendingRevealTarget = undefined;
+            void vscode.window.showWarningMessage('元素树中未找到对应元素。');
+            return;
+        }
+
+        this.postMessage({
+            command: 'revealElement',
+            target: {
+                eleFilePath: finalItem.eleFilePath,
+                eleVariableName: finalItem.eleVariableName,
+                eleLineNumber: finalItem.eleLineNumber
+            }
+        });
+        this.pendingRevealTarget = undefined;
+    }
+
     private async pushCurrentData(): Promise<void> {
         const data = await this.getTreeData();
         this.postMessage({
@@ -205,6 +261,24 @@ export class EleTreeWebviewProvider implements vscode.WebviewViewProvider {
 
     private handleCollapseAll(): void {
         this.dataProvider.collapseAll();
+    }
+
+    /**
+     * 优先聚焦具体元素树视图，失败时退回到 PATH 容器，保证后续 reveal 消息有承载目标。
+     */
+    private async focusView(): Promise<void> {
+        try {
+            await vscode.commands.executeCommand(`${EleTreeWebviewProvider.viewType}.focus`);
+            return;
+        } catch {
+            // ignore and fall through
+        }
+
+        try {
+            await vscode.commands.executeCommand('workbench.view.extension.eleTreeViewerContainer');
+        } catch {
+            // ignore
+        }
     }
 
     private async handleOpenFile(filePath: string, lineNumber: number): Promise<void> {

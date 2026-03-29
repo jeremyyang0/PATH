@@ -23,19 +23,14 @@ export class ElePropertyCodeLensProvider implements vscode.CodeLensProvider {
     }
 
     /**
-     * 每个属性提供两个原生小灰字入口，分别对应点击和双击生成。
+     * 每个元素属性只保留“跳转至树”入口，统一走元素树联动。
      */
     private buildPropertyCodeLenses(property: ParsedEleProperty): vscode.CodeLens[] {
         const range = new vscode.Range(property.propertyLine - 1, 0, property.propertyLine - 1, 0);
         return [
             new vscode.CodeLens(range, {
-                title: '生成点击',
-                command: 'eleTreeViewer.generateClickForEleProperty',
-                arguments: [property]
-            }),
-            new vscode.CodeLens(range, {
-                title: '生成双击',
-                command: 'eleTreeViewer.generateDoubleClickForEleProperty',
+                title: '跳转至树',
+                command: 'eleTreeViewer.jumpToElementInTree',
                 arguments: [property]
             })
         ];

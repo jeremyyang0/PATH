@@ -8,7 +8,8 @@ import { ElePropertyCodeLensProvider } from '../providers/elePropertyCodeLensPro
 import { EleTreeWebviewProvider } from '../providers/eleTreeWebviewProvider';
 import {
     generateClickMethodsForEleFile,
-    generateOperationForEleProperty
+    generateOperationForEleProperty,
+    resolveElePropertyFromEditor
 } from '../services/eleEditorOperationService';
 import { addOperationToAtomicFile } from '../services/eleTreeOperationService';
 
@@ -66,6 +67,19 @@ export function registerEleTreeFeature(
         }),
         vscode.commands.registerCommand('eleTreeViewer.generateClickMethodsForEleFile', (uri?: vscode.Uri) => {
             void generateClickMethodsForEleFile(uri);
+        }),
+        vscode.commands.registerCommand('eleTreeViewer.jumpToElementInTree', async (property?: ParsedEleProperty) => {
+            const resolvedProperty = await resolveElePropertyFromEditor(property);
+            if (!resolvedProperty) {
+                vscode.window.showWarningMessage('当前属性无法识别为元素树节点。');
+                return;
+            }
+
+            await provider.revealElementInTree({
+                eleFilePath: resolvedProperty.eleFilePath,
+                eleVariableName: resolvedProperty.eleVariableName,
+                eleLineNumber: resolvedProperty.eleLineNumber
+            });
         }),
         vscode.commands.registerCommand('eleTreeViewer.generateClickForEleProperty', (property?: ParsedEleProperty) => {
             void generateOperationForEleProperty('click', property);

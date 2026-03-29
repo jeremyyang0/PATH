@@ -11,8 +11,6 @@ let expandedItems = new Set();
 let currentSearchKeyword = '';
 let isAllExpanded = false;
 let shouldExpandOnUpdate = false;
-let contextMenuTarget = null;
-let parentContextMenuTarget = null;
 
 class DragDropManager {
     constructor() {
@@ -266,10 +264,9 @@ function renderTreeItem(item, level) {
         html += ` data-codepath="${escapeHtml(item.codePath || '')}"`;
         html += ` data-variablename="${escapeHtml(item.eleVariableName || '')}"`;
         html += ` data-label="${escapeHtml(item.label)}"`;
-        html += ' oncontextmenu="showContextMenu(event, this)" ondblclick="openFileOnDoubleClick(this)" draggable="true"';
+        html += ' ondblclick="openFileOnDoubleClick(this)" draggable="true"';
     } else if (nodeType === 'folder') {
         html += ` data-filepath="${escapeHtml(item.filePath || '')}"`;
-        html += ` oncontextmenu="showParentContextMenu(event, '${escapeHtml(item.fullPath)}')"`;
     }
 
     html += '>';
@@ -348,6 +345,34 @@ function selectItem(treePath) {
     }
 }
 
+/**
+ * 根据元素文件和变量名定位前端树节点，并自动展开祖先、滚动到可见区域。
+ */
+function revealElementInTree(target) {
+    const matched = findTreePathByTarget(treeData, target);
+    if (!matched) {
+        return;
+    }
+
+    for (const ancestor of matched.ancestors) {
+        if (ancestor.fullPath) {
+            expandedItems.add(ancestor.fullPath);
+        }
+    }
+
+    saveState();
+    renderTree();
+    selectItem(matched.item.fullPath);
+
+    const selectedItem = document.querySelector(`[data-path="${escapeHtml(matched.item.fullPath)}"]`);
+    if (selectedItem) {
+        selectedItem.scrollIntoView({
+            block: 'center',
+            behavior: 'smooth'
+        });
+    }
+}
+
 function openFile(button) {
     const filePath = button.getAttribute('data-filepath');
     const lineNumber = parseInt(button.getAttribute('data-line') || '1', 10);
@@ -382,40 +407,6 @@ function dragToEditor(button) {
     }
 }
 
-function showContextMenu(event, element) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    contextMenuTarget = element;
-    parentContextMenuTarget = null;
-    document.getElementById('parentContextMenu').style.display = 'none';
-
-    const menu = document.getElementById('contextMenu');
-    menu.style.left = `${event.pageX}px`;
-    menu.style.top = `${event.pageY}px`;
-    menu.style.display = 'block';
-    return false;
-}
-
-function showParentContextMenu(event, path) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    contextMenuTarget = null;
-    document.getElementById('contextMenu').style.display = 'none';
-
-    parentContextMenuTarget = findNodeByPath(filteredData, path);
-    if (!parentContextMenuTarget) {
-        return false;
-    }
-
-    const menu = document.getElementById('parentContextMenu');
-    menu.style.left = `${event.pageX}px`;
-    menu.style.top = `${event.pageY}px`;
-    menu.style.display = 'block';
-    return false;
-}
-
 function findNodeByPath(items, targetPath) {
     for (const item of items) {
         if (item.fullPath === targetPath) {
@@ -431,91 +422,36 @@ function findNodeByPath(items, targetPath) {
     return null;
 }
 
-function contextMenuAction(actionType) {
-    document.getElementById('contextMenu').style.display = 'none';
+/**
+ * 递归查找目标元素，并返回它在树中的祖先链，供前端展开路径。
+ */
+function findTreePathByTarget(items, target, ancestors = []) {
+    for (const item of items) {
+        const sameFile = normalizeFilePath(item.eleFilePath || '') === normalizeFilePath(target.eleFilePath || '');
+        const sameVariable = target.eleVariableName && item.eleVariableName === target.eleVariableName;
+        const sameLine = Number(target.eleLineNumber || 0) > 0 && Number(item.eleLineNumber || 0) === Number(target.eleLineNumber || 0);
 
-    if (!contextMenuTarget || !vscode) {
-        return;
-    }
-
-    const filePath = contextMenuTarget.getAttribute('data-filepath');
-    const fullPath = contextMenuTarget.getAttribute('data-path');
-    const variableName = contextMenuTarget.getAttribute('data-variablename');
-    const label = contextMenuTarget.getAttribute('data-label');
-
-    if (filePath && fullPath && variableName) {
-        vscode.postMessage({
-            command: 'addOperation',
-            element: {
-                fullPath,
-                eleFilePath: filePath,
-                eleVariableName: variableName,
-                label
-            },
-            operationType: actionType === 'click' ? 'click' : 'double_click'
-        });
-    }
-
-    contextMenuTarget = null;
-}
-
-function collectLeafChildren(node) {
-    const leaves = [];
-
-    function visit(item) {
-        if (getNodeType(item) === 'element' && item.eleFilePath && item.eleVariableName) {
-            leaves.push({
-                fullPath: item.fullPath,
-                eleFilePath: item.eleFilePath,
-                eleVariableName: item.eleVariableName,
-                label: item.label
-            });
+        if (getNodeType(item) === 'element' && sameFile && (sameVariable || sameLine)) {
+            return {
+                item,
+                ancestors
+            };
         }
 
         if (item.children && item.children.length > 0) {
-            for (const child of item.children) {
-                visit(child);
+            const result = findTreePathByTarget(item.children, target, [...ancestors, item]);
+            if (result) {
+                return result;
             }
         }
     }
 
-    visit(node);
-    return leaves;
+    return null;
 }
 
-function parentContextMenuAction(actionType) {
-    document.getElementById('parentContextMenu').style.display = 'none';
-
-    if (!parentContextMenuTarget || !vscode) {
-        return;
-    }
-
-    const leaves = collectLeafChildren(parentContextMenuTarget);
-    if (leaves.length > 0) {
-        vscode.postMessage({
-            command: 'batchAddOperation',
-            elements: leaves,
-            operationType: actionType
-        });
-    }
-
-    parentContextMenuTarget = null;
+function normalizeFilePath(filePath) {
+    return String(filePath || '').replace(/\//g, '\\').toLowerCase();
 }
-
-document.addEventListener('click', event => {
-    const contextMenu = document.getElementById('contextMenu');
-    const parentContextMenu = document.getElementById('parentContextMenu');
-
-    if (contextMenu && !contextMenu.contains(event.target)) {
-        contextMenu.style.display = 'none';
-        contextMenuTarget = null;
-    }
-
-    if (parentContextMenu && !parentContextMenu.contains(event.target)) {
-        parentContextMenu.style.display = 'none';
-        parentContextMenuTarget = null;
-    }
-});
 
 window.addEventListener('message', event => {
     const message = event.data;
@@ -541,6 +477,12 @@ window.addEventListener('message', event => {
                 shouldExpandOnUpdate = false;
             }
             break;
+        case 'clearSearchState':
+            document.getElementById('searchInput').value = '';
+            currentSearchKeyword = '';
+            shouldExpandOnUpdate = false;
+            saveState();
+            break;
         case 'expandAll':
             expandedItems.clear();
             collectExpandablePaths(filteredData, expandedItems);
@@ -552,6 +494,9 @@ window.addEventListener('message', event => {
         case 'restoreState':
             restoreState();
             renderTree();
+            break;
+        case 'revealElement':
+            revealElementInTree(message.target || {});
             break;
         case 'debugStatus':
             showDebugStatus(message.text);

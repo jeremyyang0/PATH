@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { EleTreeRevealTarget } from '../models/contracts';
 import * as vscode from 'vscode';
 import { orderItemsByDirectoryFile } from '../../../shared/path/orderUtils';
 import { DragAndDropController } from '../../../shared/tree/dragAndDropController';
@@ -75,6 +76,18 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
     public collapseAll(): void {
         this.setAllNodesCollapsed(this.data, true);
         this.onDidChangeTreeDataEmitter.fire();
+    }
+
+    public hasActiveSearch(): boolean {
+        return this.searchKeyword.length > 0;
+    }
+
+    /**
+     * 按文件和元素标识在当前树或完整树中查找目标节点，供“跳转至树”复用。
+     */
+    public findElementItem(target: EleTreeRevealTarget, source: 'current' | 'original' = 'current'): TreeItem | undefined {
+        const items = source === 'original' ? this.originalData : this.data;
+        return this.findElementItemInTree(items, target);
     }
 
     private async parseEleFiles(workspacePath: string) {
@@ -336,5 +349,45 @@ export class EleTreeDataProvider implements vscode.TreeDataProvider<TreeItem> {
                 this.setAllNodesCollapsed(item.children, collapsed);
             }
         }
+    }
+
+    /**
+     * 递归查找目标元素，优先按变量名匹配，找不到时再按行号兜底。
+     */
+    private findElementItemInTree(items: TreeItem[], target: EleTreeRevealTarget): TreeItem | undefined {
+        for (const item of items) {
+            if (this.isMatchingElementItem(item, target)) {
+                return item;
+            }
+
+            if (item.children && item.children.length > 0) {
+                const matchedChild = this.findElementItemInTree(item.children, target);
+                if (matchedChild) {
+                    return matchedChild;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
+    private isMatchingElementItem(item: TreeItem, target: EleTreeRevealTarget): boolean {
+        if (item.nodeType !== 'element' || !item.eleFilePath) {
+            return false;
+        }
+
+        if (!this.isSameFilePath(item.eleFilePath, target.eleFilePath)) {
+            return false;
+        }
+
+        if (target.eleVariableName && item.eleVariableName === target.eleVariableName) {
+            return true;
+        }
+
+        return Boolean(target.eleLineNumber && item.eleLineNumber === target.eleLineNumber);
+    }
+
+    private isSameFilePath(leftPath: string, rightPath: string): boolean {
+        return path.normalize(leftPath).toLowerCase() === path.normalize(rightPath).toLowerCase();
     }
 }

@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python 自动化测试辅助插件，提供元素树、方法树、PATH 文件树和 AI 代码生成功能",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -132,6 +132,10 @@
         "icon": "$(history)"
       },
       {
+        "command": "pathFileTree.createCase",
+        "title": "Create Case (创建用例)"
+      },
+      {
         "command": "pathFileTree.openItem",
         "title": "打开"
       },
@@ -180,10 +184,6 @@
         "title": "在文件夹中搜索"
       },
       {
-        "command": "pathFileTree.createCase",
-        "title": "Create Case (创建用例)"
-      },
-      {
         "command": "pathFileTree.copyItem",
         "title": "Copy"
       },
@@ -218,30 +218,6 @@
         "command": "methodsViewer.clearSearch",
         "title": "清除搜索",
         "icon": "$(clear-all)"
-      },
-      {
-        "command": "eleTreeViewer.addOperation",
-        "title": "添加操作"
-      },
-      {
-        "command": "eleTreeViewer.addClickOperation",
-        "title": "点击"
-      },
-      {
-        "command": "eleTreeViewer.addDoubleClickOperation",
-        "title": "双击"
-      },
-      {
-        "command": "eleTreeViewer.generateClickMethodsForEleFile",
-        "title": "生成点击方法"
-      },
-      {
-        "command": "eleTreeViewer.generateClickForEleProperty",
-        "title": "生成点击"
-      },
-      {
-        "command": "eleTreeViewer.generateDoubleClickForEleProperty",
-        "title": "生成双击"
       },
       {
         "command": "eleTreeViewer.openFile",
@@ -362,24 +338,29 @@
           "group": "inline"
         },
         {
-          "command": "pathFileTree.newFile",
+          "command": "pathFileTree.createCase",
           "when": "view == pathFileTree",
           "group": "0_new@1"
         },
         {
-          "command": "pathFileTree.newFolder",
+          "command": "pathFileTree.newFile",
           "when": "view == pathFileTree",
           "group": "0_new@2"
         },
         {
-          "command": "pathFileTree.newPythonPackage",
+          "command": "pathFileTree.newFolder",
           "when": "view == pathFileTree",
           "group": "0_new@3"
         },
         {
+          "command": "pathFileTree.newPythonPackage",
+          "when": "view == pathFileTree",
+          "group": "0_new@4"
+        },
+        {
           "command": "pathFileTree.newSniffBranch",
           "when": "view == pathFileTree && (viewItem == pathFileTreeMethodFolder || viewItem == pathFileTreeMethodFile)",
-          "group": "0_new@4"
+          "group": "0_new@5"
         },
         {
           "command": "pathFileTree.rename",
@@ -420,11 +401,6 @@
           "command": "pathFileTree.findInFolder",
           "when": "view == pathFileTree && viewItem == pathFileTreeFolder",
           "group": "3_search"
-        },
-        {
-          "command": "pathFileTree.createCase",
-          "when": "view == pathFileTree",
-          "group": "4_workspace"
         }
       ],
       "explorer/context": [
@@ -443,11 +419,6 @@
           "command": "eleTreeViewer.aiAgentGeneration",
           "group": "navigation",
           "when": "resourceLangId == python && resourceFilename =~ /^test_.+\\.py$/"
-        },
-        {
-          "command": "eleTreeViewer.generateClickMethodsForEleFile",
-          "group": "navigation",
-          "when": "resourceLangId == python && resourceFilename =~ /^.+_ele\\.py$/"
         }
       ]
     },

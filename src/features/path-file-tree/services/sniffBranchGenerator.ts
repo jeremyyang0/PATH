@@ -72,17 +72,14 @@ function buildEleFile(pascalName: string): string {
 }
 
 function buildMethodFile(parentDirectoryPath: string, branchName: string, pascalName: string): string {
+    // Sniff 分支方法模板直接继承对应 Ele，避免再生成一层 `_BaseXxxMethod`。
     return [
         `from ${buildMethodModulePath(path.join(parentDirectoryPath, branchName, `${branchName}_ele.py`))} import ${pascalName}Ele`,
         'from richlogger import auto_logger',
         '',
         '',
-        `class _Base${pascalName}Method(${pascalName}Ele):`,
-        '    """原子方法"""',
-        '',
-        '',
         '@auto_logger',
-        `class ${pascalName}Method(_Base${pascalName}Method):`,
+        `class ${pascalName}Method(${pascalName}Ele):`,
         '    """组合方法"""',
         ''
     ].join('\n');
