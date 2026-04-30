@@ -9,7 +9,7 @@ import { SniffViewStateStore } from '../services/sniffViewStateStore';
 export function registerSniffFeature(context: vscode.ExtensionContext): SniffFeature {
     const stateStore = new SniffViewStateStore();
     setSniffStateStore(stateStore);
-    const provider = new SniffWebviewProvider(context.extensionUri, stateStore);
+    const provider = new SniffWebviewProvider(context, stateStore);
     const overviewProvider = new SniffOverviewWebviewProvider(context.extensionUri, stateStore);
     const logsProvider = new SniffLogsWebviewProvider(context.extensionUri, stateStore);
 

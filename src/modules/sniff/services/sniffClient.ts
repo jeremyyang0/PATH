@@ -1,42 +1,39 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import * as vscode from 'vscode';
 import { StructuredError } from '../../../shared/errors/structuredError';
-import { LocalSocketTransport } from '../../../shared/ipc/localSocketTransport';
+import { NeedleEndpoint, NeedleTcpTransport } from './needleTcpTransport';
 
-type SniffTreeResponse = {
-    widget_id?: string;
-    type?: string;
-    name?: string;
-    text?: string;
-    children?: SniffTreeResponse[];
+type ErrorResponse = {
     error?: string;
     error_type?: string;
     traceback?: string;
 };
 
-type SniffSearchResponse = Array<{
+export type SniffTreeResponse = ErrorResponse & {
+    widget_id?: string;
+    type?: string;
+    name?: string;
+    text?: string;
+    children?: SniffTreeResponse[];
+};
+
+export type SniffSearchResponse = Array<{
     widget_id: string;
     type: string;
     name: string;
     text: string;
 }>;
 
-type SniffWidgetDefResponse = {
+export type SniffWidgetDefResponse = ErrorResponse & {
+    widget_id?: string;
     widget_def?: Record<string, unknown>;
     match_count?: number;
     occurrence?: number;
-    error?: string;
-    error_type?: string;
-    traceback?: string;
 };
 
-type SniffInfoResponse = Record<string, unknown> & {
-    error?: string;
-    error_type?: string;
-    traceback?: string;
-};
+export type SniffInfoResponse = Record<string, unknown> & ErrorResponse;
 
-type SniffWidgetAtPointResponse = {
+export type SniffWidgetAtPointResponse = ErrorResponse & {
     found?: boolean;
     point?: [number, number];
     widget_id?: string;
@@ -46,12 +43,30 @@ type SniffWidgetAtPointResponse = {
     widget_model?: string;
     position?: [number, number];
     size?: [number, number];
-    error?: string;
-    error_type?: string;
-    traceback?: string;
 };
 
-function throwIfError(response: { error?: string; error_type?: string; traceback?: string }): void {
+export type SniffPickResponse = ErrorResponse & {
+    accepted?: boolean;
+    widget_ids?: string[];
+    widgets?: Array<Record<string, unknown>>;
+};
+
+export type SniffSupportedPropertiesResponse = ErrorResponse & {
+    widget_id?: string;
+    properties?: Array<Record<string, unknown>>;
+};
+
+export type SniffSupportedSignalsResponse = ErrorResponse & {
+    widget_id?: string;
+    signals?: Array<Record<string, unknown>>;
+};
+
+export type SniffSupportedSlotsResponse = ErrorResponse & {
+    widget_id?: string;
+    slots?: Array<Record<string, unknown>>;
+};
+
+function throwIfError(response: ErrorResponse): void {
     if (response.error) {
         throw new StructuredError({
             error: response.error,
@@ -61,72 +76,74 @@ function throwIfError(response: { error?: string; error_type?: string; traceback
     }
 }
 
-export class SniffClient {
-    private static readonly defaultRequestTimeoutMs = 5000;
-    private readonly transport = new LocalSocketTransport();
+function requestTimeoutMs(settingName: string, fallback: number): number {
+    const configuredTimeout = vscode.workspace
+        .getConfiguration('path.sniff')
+        .get<number>(settingName, fallback);
 
-    public constructor(private readonly serverName: string) {}
-
-    private getRoutePath(route: string): string {
-        return route.trim().replace(/^\/+/, '');
+    if (!Number.isFinite(configuredTimeout) || configuredTimeout <= 0) {
+        return fallback;
     }
 
+    return Math.floor(configuredTimeout);
+}
+
+export class SniffClient {
+    private static readonly defaultRequestTimeoutMs = 5000;
+    private static readonly defaultPickRequestTimeoutMs = 3600000;
+    private readonly transport = new NeedleTcpTransport();
+
+    public constructor(private readonly endpoint: NeedleEndpoint) {}
+
     private getRequestOptions(): { timeoutMs: number } {
-        const configuredTimeout = vscode.workspace
-            .getConfiguration('path.sniff')
-            .get<number>('clientRequestTimeoutMs', SniffClient.defaultRequestTimeoutMs);
+        return {
+            timeoutMs: requestTimeoutMs('clientRequestTimeoutMs', SniffClient.defaultRequestTimeoutMs)
+        };
+    }
 
-        if (!Number.isFinite(configuredTimeout) || configuredTimeout <= 0) {
-            return { timeoutMs: SniffClient.defaultRequestTimeoutMs };
-        }
+    private getPickRequestOptions(): { timeoutMs: number } {
+        return {
+            timeoutMs: requestTimeoutMs('pickRequestTimeoutMs', SniffClient.defaultPickRequestTimeoutMs)
+        };
+    }
 
-        return { timeoutMs: Math.floor(configuredTimeout) };
+    /**
+     * 所有 Sniff API 都经由 Needle TCP route，确保 PATH 不再依赖 Python sidecar 或命名管道。
+     */
+    private async post<TResponse extends ErrorResponse>(
+        route: string,
+        payload?: Record<string, unknown>,
+        timeoutMs = this.getRequestOptions().timeoutMs
+    ): Promise<TResponse> {
+        const response = await this.transport.post<TResponse>(this.endpoint, route, payload, { timeoutMs });
+        throwIfError(response);
+        return response;
+    }
+
+    public async hello(): Promise<Record<string, unknown>> {
+        return this.post<Record<string, unknown> & ErrorResponse>('hello', {});
     }
 
     public async getWidgetTree(): Promise<SniffTreeResponse> {
-        const response = await this.transport.post<SniffTreeResponse>(
-            this.serverName,
-            this.getRoutePath('get_widget_tree'),
-            undefined,
-            this.getRequestOptions()
-        );
-        throwIfError(response);
-        return response;
+        return this.post<SniffTreeResponse>('get_widget_tree', {});
     }
 
     public async refreshWidgetTree(): Promise<SniffTreeResponse> {
-        const response = await this.transport.post<SniffTreeResponse>(
-            this.serverName,
-            this.getRoutePath('refresh_widget_tree'),
-            undefined,
-            this.getRequestOptions()
-        );
-        throwIfError(response);
-        return response;
+        return this.post<SniffTreeResponse>('refresh_widget_tree', {});
     }
 
     public async getWidgetInfo(widgetId: string): Promise<SniffInfoResponse> {
-        const response = await this.transport.post<SniffInfoResponse>(this.serverName, this.getRoutePath('get_widget_info'), {
-            widget_id: widgetId
-        }, this.getRequestOptions());
-        throwIfError(response);
-        return response;
+        return this.post<SniffInfoResponse>('get_widget_info', { widget_id: widgetId });
     }
 
     public async highlightWidget(widgetId: string): Promise<void> {
-        const response = await this.transport.post<{ success?: boolean; error?: string; error_type?: string; traceback?: string }>(
-            this.serverName,
-            this.getRoutePath('highlight_widget'),
-            { widget_id: widgetId },
-            this.getRequestOptions()
-        );
-        throwIfError(response);
+        await this.post<ErrorResponse & { success?: boolean }>('highlight_widget', { widget_id: widgetId });
     }
 
-    public async searchWidget(widgetDef: Record<string, unknown>): Promise<SniffSearchResponse> {
-        const response = await this.transport.post<SniffSearchResponse | { error?: string; error_type?: string; traceback?: string }>(
-            this.serverName,
-            this.getRoutePath('search_widget'),
+    public async searchWidgets(widgetDef: Record<string, unknown>): Promise<SniffSearchResponse> {
+        const response = await this.transport.post<SniffSearchResponse | ErrorResponse>(
+            this.endpoint,
+            'search_widgets',
             { widget_def: widgetDef },
             this.getRequestOptions()
         );
@@ -140,21 +157,11 @@ export class SniffClient {
     }
 
     public async generateWidgetDef(widgetId: string): Promise<SniffWidgetDefResponse> {
-        const response = await this.transport.post<SniffWidgetDefResponse>(this.serverName, this.getRoutePath('generate_widget_def'), {
-            widget_id: widgetId
-        }, this.getRequestOptions());
-        throwIfError(response);
-        return response;
+        return this.post<SniffWidgetDefResponse>('generate_widget_def', { widget_id: widgetId });
     }
 
     public async activateApplicationWindow(): Promise<void> {
-        const response = await this.transport.post<{ success?: boolean; error?: string; error_type?: string; traceback?: string }>(
-            this.serverName,
-            this.getRoutePath('activate_application_window'),
-            undefined,
-            this.getRequestOptions()
-        );
-        throwIfError(response);
+        await this.post<ErrorResponse & { success?: boolean }>('activate_application_window', {});
     }
 
     public async findWidgetByPoint(
@@ -162,17 +169,39 @@ export class SniffClient {
         y: number,
         refresh = false
     ): Promise<SniffWidgetAtPointResponse> {
-        const response = await this.transport.post<SniffWidgetAtPointResponse>(
-            this.serverName,
-            this.getRoutePath('find_widget_by_point'),
+        return this.post<SniffWidgetAtPointResponse>('find_widget_by_point', { x, y, refresh });
+    }
+
+    public async pickWidgets(multiSelect = true, refresh = true, timeoutMs = 0): Promise<SniffPickResponse> {
+        return this.post<SniffPickResponse>(
+            'pick_widgets',
             {
-                x,
-                y,
-                refresh
+                multi_select: multiSelect,
+                refresh,
+                timeout_ms: timeoutMs
             },
-            this.getRequestOptions()
+            this.getPickRequestOptions().timeoutMs
         );
-        throwIfError(response);
-        return response;
+    }
+
+    public async getSupportedProperties(widgetId: string): Promise<SniffSupportedPropertiesResponse> {
+        return this.post<SniffSupportedPropertiesResponse>('get_supported_properties', {
+            widget_id: widgetId,
+            refresh: false
+        });
+    }
+
+    public async getSupportedSignals(widgetId: string): Promise<SniffSupportedSignalsResponse> {
+        return this.post<SniffSupportedSignalsResponse>('get_supported_signals', {
+            widget_id: widgetId,
+            refresh: false
+        });
+    }
+
+    public async getSupportedSlots(widgetId: string): Promise<SniffSupportedSlotsResponse> {
+        return this.post<SniffSupportedSlotsResponse>('get_supported_slots', {
+            widget_id: widgetId,
+            refresh: false
+        });
     }
 }

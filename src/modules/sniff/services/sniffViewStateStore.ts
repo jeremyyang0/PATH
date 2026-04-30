@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { SniffWidgetTreeNode } from '../models/sniffModels';
 
 export interface SniffDetailsState {
-    serverName: string;
+    connectionLabel: string;
     status: string;
     selectedWidgetId: string;
     properties: Record<string, unknown>;
@@ -13,13 +13,13 @@ export interface SniffDetailsState {
 }
 
 export interface SniffTreeState {
-    serverName: string;
+    connectionLabel: string;
     tree: SniffWidgetTreeNode[];
 }
 
 function createInitialDetailsState(): SniffDetailsState {
     return {
-        serverName: 'common',
+        connectionLabel: '未连接',
         status: '未连接',
         selectedWidgetId: '',
         properties: {},
@@ -35,7 +35,7 @@ export class SniffViewStateStore {
     private readonly treeEmitter = new vscode.EventEmitter<SniffTreeState>();
     private detailsState = createInitialDetailsState();
     private treeState: SniffTreeState = {
-        serverName: 'common',
+        connectionLabel: '未连接',
         tree: []
     };
 
@@ -58,19 +58,19 @@ export class SniffViewStateStore {
 
     public getTreeState(): SniffTreeState {
         return {
-            serverName: this.treeState.serverName,
+            connectionLabel: this.treeState.connectionLabel,
             tree: this.treeState.tree
         };
     }
 
-    public setServerName(serverName: string): void {
+    public setConnectionLabel(connectionLabel: string): void {
         this.detailsState = {
             ...this.detailsState,
-            serverName
+            connectionLabel
         };
         this.treeState = {
             ...this.treeState,
-            serverName
+            connectionLabel
         };
         this.emitDetails();
         this.emitTree();
@@ -95,7 +95,7 @@ export class SniffViewStateStore {
 
     public setTree(tree: SniffWidgetTreeNode[]): void {
         this.treeState = {
-            serverName: this.treeState.serverName,
+            connectionLabel: this.treeState.connectionLabel,
             tree
         };
         this.emitTree();

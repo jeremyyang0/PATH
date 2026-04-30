@@ -639,16 +639,68 @@
           "minimum": 1,
           "description": "PATH Sniff client 超时时间"
         },
-        "path.sniff.sidecar.logLevel": {
+        "path.sniff.pickRequestTimeoutMs": {
+          "type": "number",
+          "default": 3600000,
+          "minimum": 1,
+          "description": "PATH Sniff 拾取控件请求超时时间"
+        },
+        "path.sniff.needleRuntimeBundle": {
           "type": "string",
-          "default": "info",
+          "default": "",
+          "description": "外部 Needle runtime_bundle 目录，需包含 needle-controller.exe、needle-probe.dll、needle-pythonhost.dll"
+        },
+        "path.sniff.fallbackPythonRoot": {
+          "type": "string",
+          "default": "",
+          "description": "可选 Python 3.8 runtime 根目录，传给 needle-controller 的 --fallback-python-root"
+        },
+        "path.sniff.runtimePolicy": {
+          "type": "string",
+          "default": "auto",
           "enum": [
-            "debug",
-            "info",
-            "warning",
-            "error"
+            "auto",
+            "prefer-target",
+            "bundled-only"
           ],
-          "description": "Sniff sidecar 日志级别。"
+          "description": "Needle runtime 选择策略"
+        },
+        "path.sniff.targetProfile": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "generic",
+            "sailwind"
+          ],
+          "description": "Needle 目标应用 profile"
+        },
+        "path.sniff.loadappProfiles": {
+          "type": "array",
+          "default": [],
+          "description": "PATH Sniff LoadApp 持久化配置列表，可在 Sniff 面板中通过新建、加载、编辑、删除管理。",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "targetExe"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "LoadApp 配置名称"
+              },
+              "targetExe": {
+                "type": "string",
+                "description": "要启动并 attach 的目标 exe 路径"
+              },
+              "targetArgs": {
+                "type": "string",
+                "default": "",
+                "description": "目标 exe 启动参数"
+              }
+            }
+          }
         }
       }
     }
@@ -656,7 +708,6 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "build:sniff-sidecar": "node .\\tools\\build-sniff-sidecar-from-scout.js",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",

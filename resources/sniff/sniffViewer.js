@@ -6,20 +6,35 @@ let selectedWidgetIds = [];
 let expandedWidgetIds = new Set();
 let errorText = '';
 let contextTargetWidgetId = '';
-let activeServerName = 'common';
+let activeConnectionLabel = '未连接';
 let lastTreeClick = { widgetId: '', time: 0 };
 let autoRefreshEnabled = false;
 let autoRefreshIntervalSeconds = 5;
 let pickInProgress = false;
 let ctrlMultiSelectActive = false;
+let restoredConnectionForm = false;
 
 const elements = {
     treeContainer: document.getElementById('treeContainer'),
     treeMeta: document.getElementById('treeMeta'),
     selectionMeta: document.getElementById('selectionMeta'),
     statusIndicator: document.getElementById('statusIndicator'),
-    serverNameInput: document.getElementById('serverNameInput'),
-    applyServerButton: document.getElementById('applyServerButton'),
+    connectionModeSelect: document.getElementById('connectionModeSelect'),
+    remoteFields: document.getElementById('remoteFields'),
+    attachFields: document.getElementById('attachFields'),
+    loadappFields: document.getElementById('loadappFields'),
+    hostInput: document.getElementById('hostInput'),
+    portInput: document.getElementById('portInput'),
+    pidInput: document.getElementById('pidInput'),
+    targetExeInput: document.getElementById('targetExeInput'),
+    targetArgsInput: document.getElementById('targetArgsInput'),
+    chooseTargetExeButton: document.getElementById('chooseTargetExeButton'),
+    newLoadAppProfileButton: document.getElementById('newLoadAppProfileButton'),
+    loadLoadAppProfileButton: document.getElementById('loadLoadAppProfileButton'),
+    editLoadAppProfileButton: document.getElementById('editLoadAppProfileButton'),
+    deleteLoadAppProfileButton: document.getElementById('deleteLoadAppProfileButton'),
+    connectButton: document.getElementById('connectButton'),
+    connectionLabel: document.getElementById('connectionLabel'),
     autoRefreshToggle: document.getElementById('autoRefreshToggle'),
     autoRefreshIntervalInput: document.getElementById('autoRefreshIntervalInput'),
     refreshButton: document.getElementById('refreshButton'),
@@ -82,7 +97,12 @@ function saveState() {
         selectedWidgetId,
         selectedWidgetIds,
         searchWidgetDefInput: elements.searchWidgetDefInput ? elements.searchWidgetDefInput.value : '',
-        serverNameInput: elements.serverNameInput ? elements.serverNameInput.value : '',
+        connectionMode: elements.connectionModeSelect ? elements.connectionModeSelect.value : 'remote',
+        host: elements.hostInput ? elements.hostInput.value : '',
+        port: elements.portInput ? elements.portInput.value : '',
+        pid: elements.pidInput ? elements.pidInput.value : '',
+        targetExe: elements.targetExeInput ? elements.targetExeInput.value : '',
+        targetArgs: elements.targetArgsInput ? elements.targetArgsInput.value : '',
         autoRefreshEnabled,
         autoRefreshIntervalSeconds
     });
@@ -110,8 +130,34 @@ function restoreState() {
         elements.searchWidgetDefInput.value = state.searchWidgetDefInput;
     }
 
-    if (typeof state.serverNameInput === 'string' && state.serverNameInput.trim() && elements.serverNameInput) {
-        elements.serverNameInput.value = state.serverNameInput;
+    if (typeof state.connectionMode === 'string' && elements.connectionModeSelect) {
+        elements.connectionModeSelect.value = state.connectionMode;
+        restoredConnectionForm = true;
+    }
+
+    if (typeof state.host === 'string' && elements.hostInput) {
+        elements.hostInput.value = state.host || '127.0.0.1';
+        restoredConnectionForm = true;
+    }
+
+    if (typeof state.port === 'string' && elements.portInput) {
+        elements.portInput.value = state.port;
+        restoredConnectionForm = true;
+    }
+
+    if (typeof state.pid === 'string' && elements.pidInput) {
+        elements.pidInput.value = state.pid;
+        restoredConnectionForm = true;
+    }
+
+    if (typeof state.targetExe === 'string' && elements.targetExeInput) {
+        elements.targetExeInput.value = state.targetExe;
+        restoredConnectionForm = true;
+    }
+
+    if (typeof state.targetArgs === 'string' && elements.targetArgsInput) {
+        elements.targetArgsInput.value = state.targetArgs;
+        restoredConnectionForm = true;
     }
 
     if (typeof state.autoRefreshEnabled === 'boolean') {
@@ -289,8 +335,118 @@ function renderTreeNode(node, level) {
     `;
 }
 
-function getRequestedServerName() {
-    return (elements.serverNameInput ? elements.serverNameInput.value : '').trim() || 'common';
+function getConnectionMode() {
+    const mode = elements.connectionModeSelect ? elements.connectionModeSelect.value : 'remote';
+    return ['remote', 'attach', 'loadapp'].includes(mode) ? mode : 'remote';
+}
+
+function getConnectionRequest() {
+    const mode = getConnectionMode();
+    if (mode === 'attach') {
+        return {
+            mode,
+            pid: Number(elements.pidInput ? elements.pidInput.value : 0)
+        };
+    }
+    if (mode === 'loadapp') {
+        return {
+            mode,
+            targetExe: elements.targetExeInput ? elements.targetExeInput.value.trim() : '',
+            targetArgs: elements.targetArgsInput ? elements.targetArgsInput.value : ''
+        };
+    }
+    return {
+        mode,
+        host: (elements.hostInput ? elements.hostInput.value : '').trim() || '127.0.0.1',
+        port: Number(elements.portInput ? elements.portInput.value : 0)
+    };
+}
+
+function syncConnectionFields() {
+    const mode = getConnectionMode();
+    if (elements.remoteFields) {
+        elements.remoteFields.classList.toggle('visible', mode === 'remote');
+    }
+    if (elements.attachFields) {
+        elements.attachFields.classList.toggle('visible', mode === 'attach');
+    }
+    if (elements.loadappFields) {
+        elements.loadappFields.classList.toggle('visible', mode === 'loadapp');
+    }
+}
+
+function applyConnectionForm(connection, force = false) {
+    if (!connection || (!force && restoredConnectionForm)) {
+        return;
+    }
+
+    if (connection.mode && elements.connectionModeSelect) {
+        elements.connectionModeSelect.value = String(connection.mode);
+    }
+    if (connection.host !== undefined && elements.hostInput) {
+        elements.hostInput.value = String(connection.host || '127.0.0.1');
+    }
+    if (connection.port !== undefined && elements.portInput) {
+        elements.portInput.value = Number(connection.port) > 0 ? String(connection.port) : '';
+    }
+    if (connection.pid !== undefined && elements.pidInput) {
+        elements.pidInput.value = Number(connection.pid) > 0 ? String(connection.pid) : '';
+    }
+    if (connection.targetExe !== undefined && elements.targetExeInput) {
+        elements.targetExeInput.value = String(connection.targetExe || '');
+    }
+    if (connection.targetArgs !== undefined && elements.targetArgsInput) {
+        elements.targetArgsInput.value = String(connection.targetArgs || '');
+    }
+    restoredConnectionForm = true;
+    syncConnectionFields();
+    saveState();
+}
+
+function connectNeedle() {
+    setStatus('正在连接 Needle');
+    saveState();
+    postToExtensionHost({
+        command: 'connect',
+        connection: getConnectionRequest()
+    });
+}
+
+function createLoadAppProfile() {
+    saveState();
+    postToExtensionHost({
+        command: 'createLoadAppProfile',
+        connection: getConnectionRequest()
+    });
+}
+
+function loadLoadAppProfile() {
+    saveState();
+    postToExtensionHost({
+        command: 'loadLoadAppProfile'
+    });
+}
+
+function editLoadAppProfile() {
+    saveState();
+    postToExtensionHost({
+        command: 'editLoadAppProfile'
+    });
+}
+
+function deleteLoadAppProfile() {
+    saveState();
+    postToExtensionHost({
+        command: 'deleteLoadAppProfile'
+    });
+}
+
+function chooseLoadAppTarget() {
+    saveState();
+    postToExtensionHost({
+        command: 'chooseLoadAppTarget',
+        connection: getConnectionRequest()
+    });
 }
 
 function normalizeAutoRefreshInterval(value) {
@@ -332,14 +488,6 @@ function applyAutoRefreshSettings() {
     });
 }
 
-function applyServerName() {
-    setStatus('正在切换 server_name');
-    saveState();
-    postToExtensionHost({
-        command: 'setServerName',
-        serverName: getRequestedServerName()
-    });
-}
 
 function normalizeSelection(widgetIds) {
     const normalized = [];
@@ -544,25 +692,47 @@ function hideContextMenu() {
 
 if (elements.refreshButton) {
     elements.refreshButton.addEventListener('click', () => {
-        const requestedServerName = getRequestedServerName();
         saveState();
-
-        if (requestedServerName !== activeServerName) {
-            applyServerName();
-            return;
-        }
-
         setStatus('正在刷新');
         postToExtensionHost({
-            command: 'refresh',
-            serverName: requestedServerName
+            command: 'refresh'
         });
     });
 }
 
-if (elements.applyServerButton) {
-    elements.applyServerButton.addEventListener('click', () => {
-        applyServerName();
+if (elements.connectButton) {
+    elements.connectButton.addEventListener('click', () => {
+        connectNeedle();
+    });
+}
+
+if (elements.chooseTargetExeButton) {
+    elements.chooseTargetExeButton.addEventListener('click', () => {
+        chooseLoadAppTarget();
+    });
+}
+
+if (elements.newLoadAppProfileButton) {
+    elements.newLoadAppProfileButton.addEventListener('click', () => {
+        createLoadAppProfile();
+    });
+}
+
+if (elements.loadLoadAppProfileButton) {
+    elements.loadLoadAppProfileButton.addEventListener('click', () => {
+        loadLoadAppProfile();
+    });
+}
+
+if (elements.editLoadAppProfileButton) {
+    elements.editLoadAppProfileButton.addEventListener('click', () => {
+        editLoadAppProfile();
+    });
+}
+
+if (elements.deleteLoadAppProfileButton) {
+    elements.deleteLoadAppProfileButton.addEventListener('click', () => {
+        deleteLoadAppProfile();
     });
 }
 
@@ -580,10 +750,20 @@ if (elements.autoRefreshIntervalInput) {
     });
 }
 
-if (elements.serverNameInput) {
-    elements.serverNameInput.addEventListener('keydown', event => {
+if (elements.connectionModeSelect) {
+    elements.connectionModeSelect.addEventListener('change', () => {
+        syncConnectionFields();
+        saveState();
+    });
+}
+
+for (const input of [elements.hostInput, elements.portInput, elements.pidInput, elements.targetArgsInput]) {
+    if (!input) {
+        continue;
+    }
+    input.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
-            applyServerName();
+            connectNeedle();
         }
     });
 }
@@ -603,8 +783,7 @@ if (elements.pickButton) {
         setStatus('正在准备拾取');
         saveState();
         postToExtensionHost({
-            command: 'pickWidget',
-            serverName: getRequestedServerName()
+            command: 'pickWidget'
         });
     });
 }
@@ -834,9 +1013,9 @@ window.addEventListener('message', event => {
     switch (message.command) {
         case 'setTree':
             treeData = message.tree || [];
-            activeServerName = String(message.serverName || activeServerName);
-            if (elements.serverNameInput) {
-                elements.serverNameInput.value = activeServerName;
+            activeConnectionLabel = String(message.connectionLabel || activeConnectionLabel);
+            if (elements.connectionLabel) {
+                elements.connectionLabel.textContent = activeConnectionLabel;
             }
             if (message.resetState) {
                 selectedWidgetId = '';
@@ -865,6 +1044,37 @@ window.addEventListener('message', event => {
             pickInProgress = Boolean(message.inProgress);
             syncPickControls();
             break;
+        case 'setConnectionState':
+            if (message.connection) {
+                activeConnectionLabel = String(message.connection.label || activeConnectionLabel);
+                if (elements.connectionLabel) {
+                    elements.connectionLabel.textContent = activeConnectionLabel;
+                }
+                if (message.connection.mode && elements.connectionModeSelect) {
+                    elements.connectionModeSelect.value = String(message.connection.mode);
+                    syncConnectionFields();
+                }
+                if (message.connection.host && elements.hostInput) {
+                    elements.hostInput.value = String(message.connection.host);
+                }
+                if (message.connection.port && elements.portInput) {
+                    elements.portInput.value = String(message.connection.port);
+                }
+                if (message.connection.pid && elements.pidInput) {
+                    elements.pidInput.value = String(message.connection.pid);
+                }
+                if (message.connection.targetExe !== undefined && elements.targetExeInput) {
+                    elements.targetExeInput.value = String(message.connection.targetExe || '');
+                }
+                if (message.connection.targetArgs !== undefined && elements.targetArgsInput) {
+                    elements.targetArgsInput.value = String(message.connection.targetArgs || '');
+                }
+                saveState();
+            }
+            break;
+        case 'setLoadAppProfile':
+            applyConnectionForm(message.connection || null, Boolean(message.force));
+            break;
         case 'applyExternalSelection':
             applySelection(message.widgetIds || [], String(message.primaryWidgetId || ''), {
                 requestDetails: false,
@@ -881,6 +1091,7 @@ window.addEventListener('message', event => {
 });
 
 restoreState();
+syncConnectionFields();
 syncAutoRefreshControls();
 syncPickControls();
 renderTree();
@@ -889,7 +1100,6 @@ setStatus(vscode ? '等待连接' : 'bridge unavailable');
 updateSelectionMeta();
 postToExtensionHost({
     command: 'ready',
-    serverName: getRequestedServerName(),
     autoRefreshEnabled,
     autoRefreshIntervalSeconds
 });

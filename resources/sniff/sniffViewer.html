@@ -57,7 +57,8 @@
             align-items: center;
             gap: 6px;
             min-width: 0;
-            overflow: hidden;
+            overflow: visible;
+            flex-wrap: wrap;
         }
 
         .toolbar-label {
@@ -73,11 +74,54 @@
             border-radius: 7px;
         }
 
+        .mode-select {
+            width: 92px;
+            flex: 0 0 92px;
+        }
+
+        .host-input {
+            min-width: 92px;
+            flex: 1 1 96px;
+        }
+
+        .path-input {
+            min-width: 160px;
+            flex: 2 1 180px;
+        }
+
+        .args-input {
+            min-width: 120px;
+            flex: 1 1 140px;
+        }
+
+        .path-input[readonly] {
+            color: var(--vscode-input-foreground);
+            cursor: default;
+        }
+
+        .connection-field {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .connection-field.visible {
+            display: flex;
+        }
+
         .compact-number-input {
-            width: 52px;
-            min-width: 52px;
+            width: 92px;
+            min-width: 92px;
             padding: 5px 6px;
             border-radius: 7px;
+        }
+
+        .port-input,
+        .pid-input {
+            width: 104px;
+            min-width: 104px;
+            flex: 0 0 104px;
         }
 
         .compact-button {
@@ -104,6 +148,16 @@
         .toolbar-unit {
             color: var(--muted);
             font-size: 11px;
+        }
+
+        .connection-label {
+            color: var(--muted);
+            font-size: 11px;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1 1 120px;
         }
 
         .field-label,
@@ -403,9 +457,7 @@
                 padding: 8px;
             }
 
-            .toolbar-row {
-                gap: 4px;
-            }
+            .toolbar-row { gap: 4px; }
 
             .toolbar-label {
                 font-size: 10px;
@@ -416,8 +468,15 @@
             }
 
             .compact-number-input {
-                width: 46px;
-                min-width: 46px;
+                width: 82px;
+                min-width: 82px;
+            }
+
+            .port-input,
+            .pid-input {
+                width: 96px;
+                min-width: 96px;
+                flex-basis: 96px;
             }
         }
     </style>
@@ -426,14 +485,36 @@
     <div class="app">
         <div class="toolbar">
             <div class="toolbar-row">
-                <span class="toolbar-label">server</span>
-                <input id="serverNameInput" class="input compact-input" value="common" placeholder="common" />
-                <button id="applyServerButton" class="button secondary compact-button">应用</button>
+                <span class="toolbar-label">mode</span>
+                <select id="connectionModeSelect" class="input compact-input mode-select">
+                    <option value="remote">Remote</option>
+                    <option value="attach">Attach</option>
+                    <option value="loadapp">LoadApp</option>
+                </select>
+                <span id="remoteFields" class="connection-field visible">
+                    <input id="hostInput" class="input compact-input host-input" value="127.0.0.1" placeholder="host" />
+                    <input id="portInput" class="input compact-number-input port-input" type="number" min="1" max="65535" placeholder="port" />
+                </span>
+                <span id="attachFields" class="connection-field">
+                    <input id="pidInput" class="input compact-number-input pid-input" type="number" min="1" placeholder="pid" />
+                </span>
+                <span id="loadappFields" class="connection-field">
+                    <input id="targetExeInput" class="input compact-input path-input" placeholder="选择 target.exe" readonly />
+                    <button id="chooseTargetExeButton" class="button secondary compact-button" type="button">选择</button>
+                    <input id="targetArgsInput" class="input compact-input args-input" placeholder="args" />
+                    <button id="newLoadAppProfileButton" class="button secondary compact-button" type="button">新建</button>
+                    <button id="loadLoadAppProfileButton" class="button secondary compact-button" type="button">加载</button>
+                    <button id="editLoadAppProfileButton" class="button secondary compact-button" type="button">编辑</button>
+                    <button id="deleteLoadAppProfileButton" class="button secondary compact-button" type="button">删除</button>
+                </span>
+                <button id="connectButton" class="button secondary compact-button">连接</button>
                 <label class="inline-toggle">
                     <input id="autoRefreshToggle" class="toggle" type="checkbox" />
                     <span class="toolbar-label">自动刷新</span>
                 </label>
                 <input id="autoRefreshIntervalInput" class="input compact-number-input" type="number" min="1" step="1" value="5" />
+                <span id="connectionLabel" class="connection-label">未连接</span>
+                <span id="statusIndicator" class="connection-label">等待连接</span>
             </div>
         </div>
 
@@ -442,6 +523,7 @@
                 <div class="panel-title">
                     <span>控件树</span>
                     <span id="treeMeta" class="field-label">0 nodes</span>
+                    <span id="selectionMeta" class="field-label">未选择控件</span>
                 </div>
                 <div class="panel-actions">
                     <button id="pickButton" class="icon-button" type="button" title="拾取控件" aria-label="拾取控件">

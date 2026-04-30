@@ -1,26 +1,23 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {
+    SniffPickResult,
     SniffSearchResult,
+    SniffSupportedProperty,
+    SniffSupportedSignal,
+    SniffSupportedSlot,
     SniffWidgetAtPointResult,
     SniffWidgetDefResult,
     SniffWidgetInfo,
     SniffWidgetTreeNode
 } from '../models/sniffModels';
-import { SniffClient } from './sniffClient';
-
-type SniffTreeResponse = {
-    widget_id?: string;
-    type?: string;
-    name?: string;
-    text?: string;
-    children?: SniffTreeResponse[];
-};
+import { NeedleEndpoint } from './needleTcpTransport';
+import { SniffClient, SniffTreeResponse } from './sniffClient';
 
 export class SniffService {
     private readonly client: SniffClient;
 
-    public constructor(serverName: string) {
-        this.client = new SniffClient(serverName);
+    public constructor(endpoint: NeedleEndpoint) {
+        this.client = new SniffClient(endpoint);
     }
 
     public async getTree(): Promise<SniffWidgetTreeNode[]> {
@@ -49,7 +46,7 @@ export class SniffService {
     }
 
     public async searchWidgets(widgetDef: Record<string, unknown>): Promise<SniffSearchResult[]> {
-        const response = await this.client.searchWidget(widgetDef);
+        const response = await this.client.searchWidgets(widgetDef);
         return response.map(item => ({
             widgetId: item.widget_id,
             type: item.type,
@@ -84,6 +81,30 @@ export class SniffService {
             position: response.position || [-1, -1],
             size: response.size || [0, 0]
         };
+    }
+
+    public async pickWidgets(): Promise<SniffPickResult> {
+        const response = await this.client.pickWidgets(true, true, 0);
+        return {
+            accepted: Boolean(response.accepted),
+            widgetIds: Array.isArray(response.widget_ids) ? response.widget_ids.map(String).filter(Boolean) : [],
+            widgets: Array.isArray(response.widgets) ? response.widgets : []
+        };
+    }
+
+    public async getSupportedProperties(widgetId: string): Promise<SniffSupportedProperty[]> {
+        const response = await this.client.getSupportedProperties(widgetId);
+        return Array.isArray(response.properties) ? response.properties : [];
+    }
+
+    public async getSupportedSignals(widgetId: string): Promise<SniffSupportedSignal[]> {
+        const response = await this.client.getSupportedSignals(widgetId);
+        return Array.isArray(response.signals) ? response.signals : [];
+    }
+
+    public async getSupportedSlots(widgetId: string): Promise<SniffSupportedSlot[]> {
+        const response = await this.client.getSupportedSlots(widgetId);
+        return Array.isArray(response.slots) ? response.slots : [];
     }
 
     private extractActualTopNodes(root: SniffTreeResponse): SniffWidgetTreeNode[] {

@@ -1,22 +1,34 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { StructuredError } from '../../../shared/errors/structuredError';
 import { loadWebviewHtml } from '../../../platform/vscode/webview/loadWebviewHtml';
 import { SniffWidgetTreeNode } from '../models/sniffModels';
-import { SniffSidecarService } from '../services/sniffSidecarService';
+import {
+    NeedleRuntimeService,
+    SniffConnectionRequest,
+    SniffConnectionState
+} from '../services/needleRuntimeService';
 import { SniffService } from '../services/sniffService';
 import { SniffWidgetDefCopyService } from '../services/sniffWidgetDefCopyService';
 import { SniffViewStateStore } from '../services/sniffViewStateStore';
 
+interface LoadAppProfile {
+    name: string;
+    targetExe: string;
+    targetArgs: string;
+}
+
 export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
     public static readonly viewType = 'pathSniffViewer';
     private static readonly defaultAutoRefreshIntervalSeconds = 5;
+    private static readonly loadAppProfilesSettingName = 'loadappProfiles';
 
     private static readonly outputChannel = vscode.window.createOutputChannel('PATH Sniff');
 
     private view?: vscode.WebviewView;
     private readonly viewDisposables: vscode.Disposable[] = [];
-    private currentServerName = 'common';
-    private service = new SniffService(this.currentServerName);
+    private currentConnection?: SniffConnectionState;
+    private service?: SniffService;
     private hasInitializedAutoRefresh = false;
     private autoRefreshEnabled = false;
     private autoRefreshIntervalSeconds = SniffWebviewProvider.defaultAutoRefreshIntervalSeconds;
@@ -24,15 +36,13 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
     private refreshInProgress = false;
     private pickInProgress = false;
     private readonly copyService = new SniffWidgetDefCopyService();
-    private readonly sidecarService: SniffSidecarService;
+    private readonly runtimeService = new NeedleRuntimeService();
     private currentResolveToken = 0;
 
     public constructor(
-        private readonly extensionUri: vscode.Uri,
+        private readonly context: vscode.ExtensionContext,
         private readonly stateStore: SniffViewStateStore
-    ) {
-        this.sidecarService = new SniffSidecarService(this.extensionUri.fsPath);
-    }
+    ) {}
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -40,10 +50,10 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         _token: vscode.CancellationToken
     ): void {
         const resolveToken = this.attachView(webviewView);
-        this.log(`Resolve tree view. currentServerName=${this.currentServerName}`);
+        this.log(`Resolve tree view. connection=${this.connectionLabel()}`);
         webviewView.webview.options = {
             enableScripts: true,
-            localResourceRoots: [this.extensionUri]
+            localResourceRoots: [this.context.extensionUri]
         };
 
         this.viewDisposables.push(webviewView.webview.onDidReceiveMessage(data => {
@@ -58,23 +68,38 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
                             Number(data.autoRefreshIntervalSeconds || 0)
                         );
                     }
+                    this.pushConnectionState();
                     this.pushTreeState();
                     this.pushAutoRefreshState();
                     this.pushPickState();
-                    void this.refresh(String(data.serverName || this.currentServerName), false);
+                    break;
+                case 'connect':
+                    void this.connect(data.connection as SniffConnectionRequest | undefined);
+                    break;
+                case 'chooseLoadAppTarget':
+                    void this.chooseLoadAppTarget(data.connection as SniffConnectionRequest | undefined);
+                    break;
+                case 'createLoadAppProfile':
+                    void this.createLoadAppProfile(data.connection as SniffConnectionRequest | undefined);
+                    break;
+                case 'loadLoadAppProfile':
+                    void this.loadLoadAppProfile();
+                    break;
+                case 'editLoadAppProfile':
+                    void this.editLoadAppProfile();
+                    break;
+                case 'deleteLoadAppProfile':
+                    void this.deleteLoadAppProfile();
                     break;
                 case 'refresh':
-                    void this.refresh(String(data.serverName || this.currentServerName), false);
+                    void this.refresh();
                     break;
                 case 'setAutoRefresh':
                     this.updateAutoRefreshState(Boolean(data.enabled), Number(data.intervalSeconds || 0));
                     this.pushAutoRefreshState();
                     break;
-                case 'setServerName':
-                    void this.refresh(String(data.serverName || this.currentServerName), true);
-                    break;
                 case 'pickWidget':
-                    void this.pickWidget(String(data.serverName || this.currentServerName));
+                    void this.pickWidget();
                     break;
                 case 'selectWidget':
                     void this.selectWidget(String(data.widgetId || ''));
@@ -100,7 +125,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
             }
         }));
 
-        webviewView.webview.html = loadWebviewHtml(this.extensionUri, webviewView.webview, 'resources/sniff/sniffViewer.html', [
+        webviewView.webview.html = loadWebviewHtml(this.context.extensionUri, webviewView.webview, 'resources/sniff/sniffViewer.html', [
             {
                 placeholder: '<script src="sniffViewer.js"></script>',
                 relativePath: 'resources/sniff/sniffViewer.js',
@@ -112,9 +137,9 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
             if (this.view !== webviewView || resolveToken !== this.currentResolveToken) {
                 return;
             }
+            this.pushConnectionState();
             this.pushTreeState();
             this.pushPickState();
-            void this.refresh(this.currentServerName, false);
         }, 300);
         this.viewDisposables.push(webviewView.onDidDispose(() => {
             if (this.view === webviewView) {
@@ -131,32 +156,28 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         this.clearView();
     }
 
-    public refresh(serverName = this.currentServerName, resetState = false): Promise<void> {
+    public refresh(resetState = false): Promise<void> {
         if (this.refreshInProgress) {
-            this.log(`Skip refresh because another refresh is running. serverName=${this.currentServerName}`);
+            this.log(`Skip refresh because another refresh is running. connection=${this.connectionLabel()}`);
             return Promise.resolve();
         }
 
         this.refreshInProgress = true;
         return this.run(async () => {
-            const serverChanged = this.updateServerName(serverName);
-            this.setStatus(`正在连接 ${this.currentServerName} 并刷新控件树...`);
-            this.log(
-                `Refreshing tree. serverName=${this.currentServerName}, ` +
-                `serverChanged=${String(serverChanged)}, resetState=${String(resetState)}`
-            );
+            const service = this.requireService();
+            this.setStatus(`正在刷新 ${this.connectionLabel()} 控件树...`);
+            this.log(`Refreshing tree. connection=${this.connectionLabel()}, resetState=${String(resetState)}`);
 
-            const tree = await this.service.refreshTree();
+            const tree = await service.refreshTree();
             this.log(`Tree refreshed. topLevelNodes=${tree.length}`);
 
             this.setStatus(
                 tree.length > 0
-                    ? `已连接 ${this.currentServerName}，收到 ${tree.length} 个顶层节点`
-                    : `已连接 ${this.currentServerName}，但控件树为空`
+                    ? `已连接 ${this.connectionLabel()}，收到 ${tree.length} 个顶层节点`
+                    : `已连接 ${this.connectionLabel()}，但控件树为空`
             );
 
-            this.stateStore.setServerName(this.currentServerName);
-            this.syncTreeState(tree, resetState && serverChanged);
+            this.syncTreeState(tree, resetState);
         }).finally(() => {
             this.refreshInProgress = false;
         });
@@ -170,6 +191,177 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
                 ? `已开启自动刷新 (${this.autoRefreshIntervalSeconds}s)`
                 : '已关闭自动刷新'
         );
+    }
+
+    private async connect(request?: SniffConnectionRequest): Promise<void> {
+        await this.run(async () => {
+            const connection = await this.resolveConnection(request);
+            this.currentConnection = connection;
+            this.service = new SniffService(this.runtimeService.endpointFromState(connection));
+            this.stateStore.setConnectionLabel(connection.label);
+            this.stateStore.clearSelection();
+            this.pushConnectionState();
+            this.setStatus(`已连接 ${connection.label}`);
+            this.log(`Connected. mode=${connection.mode}, label=${connection.label}`);
+            await this.refresh(true);
+        });
+    }
+
+    private async resolveConnection(request?: SniffConnectionRequest): Promise<SniffConnectionState> {
+        const mode = request?.mode || 'remote';
+        if (mode === 'attach') {
+            return this.runtimeService.attach(Number(request?.pid || 0));
+        }
+        if (mode === 'loadapp') {
+            return this.runtimeService.loadapp(String(request?.targetExe || ''), String(request?.targetArgs || ''));
+        }
+        return this.runtimeService.resolveRemoteConnection(String(request?.host || '127.0.0.1'), Number(request?.port || 0));
+    }
+
+    private async chooseLoadAppTarget(request?: SniffConnectionRequest): Promise<void> {
+        const targetExe = await this.pickLoadAppTarget(String(request?.targetExe || ''));
+        if (!targetExe) {
+            return;
+        }
+
+        const nextRequest: SniffConnectionRequest = {
+            ...(request || {}),
+            mode: 'loadapp',
+            targetExe
+        };
+        this.postMessage({
+            command: 'setLoadAppProfile',
+            connection: nextRequest,
+            force: true
+        });
+    }
+
+    /**
+     * 将当前 LoadApp 表单保存到 VS Code 配置，供后续 QuickPick 直接复用。
+     */
+    private async createLoadAppProfile(request?: SniffConnectionRequest): Promise<void> {
+        const current = this.normalizeLoadAppRequest(request);
+        const targetExe = current.targetExe || await this.pickLoadAppTarget('');
+        if (!targetExe) {
+            return;
+        }
+
+        const name = await this.promptProfileName('新建 LoadApp 配置', this.profileNameFromTarget(targetExe));
+        if (!name) {
+            return;
+        }
+
+        const targetArgs = await vscode.window.showInputBox({
+            title: 'LoadApp 启动参数',
+            prompt: '填写启动参数，可留空。',
+            value: current.targetArgs
+        });
+        if (targetArgs === undefined) {
+            return;
+        }
+
+        const profiles = this.getLoadAppProfiles();
+        const duplicateIndex = profiles.findIndex(profile => profile.name === name);
+        if (duplicateIndex >= 0) {
+            const overwrite = await vscode.window.showWarningMessage(
+                `LoadApp 配置 "${name}" 已存在，是否覆盖？`,
+                '覆盖',
+                '取消'
+            );
+            if (overwrite !== '覆盖') {
+                return;
+            }
+        }
+
+        const nextProfile: LoadAppProfile = { name, targetExe, targetArgs };
+        const nextProfiles = [...profiles];
+        if (duplicateIndex >= 0) {
+            nextProfiles[duplicateIndex] = nextProfile;
+        } else {
+            nextProfiles.push(nextProfile);
+        }
+
+        await this.updateLoadAppProfiles(nextProfiles);
+        this.applyLoadAppProfile(nextProfile);
+        void vscode.window.showInformationMessage(`已保存 LoadApp 配置 "${name}"`);
+    }
+
+    /**
+     * 从 VS Code 配置中选择一条 LoadApp 配置并回填到连接面板。
+     */
+    private async loadLoadAppProfile(): Promise<void> {
+        const profile = await this.pickLoadAppProfileFromSettings('选择要加载的 LoadApp 配置');
+        if (!profile) {
+            return;
+        }
+
+        this.applyLoadAppProfile(profile);
+        void vscode.window.showInformationMessage(`已加载 LoadApp 配置 "${profile.name}"`);
+    }
+
+    /**
+     * 编辑已有 LoadApp 配置；取消选择目标程序时保留原路径。
+     */
+    private async editLoadAppProfile(): Promise<void> {
+        const profiles = this.getLoadAppProfiles();
+        const profile = await this.pickLoadAppProfileFromSettings('选择要编辑的 LoadApp 配置', profiles);
+        if (!profile) {
+            return;
+        }
+
+        const name = await this.promptProfileName('编辑 LoadApp 配置名称', profile.name);
+        if (!name) {
+            return;
+        }
+
+        const pickedTargetExe = await this.pickLoadAppTarget(profile.targetExe, '选择新的 Needle LoadApp 目标程序（取消则保留原路径）');
+        const targetArgs = await vscode.window.showInputBox({
+            title: 'LoadApp 启动参数',
+            prompt: '填写启动参数，可留空。',
+            value: profile.targetArgs
+        });
+        if (targetArgs === undefined) {
+            return;
+        }
+
+        const duplicateIndex = profiles.findIndex(candidate => candidate.name === name && candidate.name !== profile.name);
+        if (duplicateIndex >= 0) {
+            void vscode.window.showWarningMessage(`LoadApp 配置 "${name}" 已存在，请换一个名称。`);
+            return;
+        }
+
+        const nextProfile: LoadAppProfile = {
+            name,
+            targetExe: pickedTargetExe || profile.targetExe,
+            targetArgs
+        };
+        const nextProfiles = profiles.map(candidate => candidate.name === profile.name ? nextProfile : candidate);
+        await this.updateLoadAppProfiles(nextProfiles);
+        this.applyLoadAppProfile(nextProfile);
+        void vscode.window.showInformationMessage(`已更新 LoadApp 配置 "${name}"`);
+    }
+
+    /**
+     * 删除 VS Code 配置中的 LoadApp 配置项，避免误删时先二次确认。
+     */
+    private async deleteLoadAppProfile(): Promise<void> {
+        const profiles = this.getLoadAppProfiles();
+        const profile = await this.pickLoadAppProfileFromSettings('选择要删除的 LoadApp 配置', profiles);
+        if (!profile) {
+            return;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(
+            `确定删除 LoadApp 配置 "${profile.name}"？`,
+            '删除',
+            '取消'
+        );
+        if (confirm !== '删除') {
+            return;
+        }
+
+        await this.updateLoadAppProfiles(profiles.filter(candidate => candidate.name !== profile.name));
+        void vscode.window.showInformationMessage(`已删除 LoadApp 配置 "${profile.name}"`);
     }
 
     private async selectWidget(widgetId: string): Promise<void> {
@@ -187,7 +379,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         this.stateStore.clearSelection();
     }
 
-    private async pickWidget(serverName: string): Promise<void> {
+    private async pickWidget(): Promise<void> {
         if (this.pickInProgress) {
             return;
         }
@@ -196,38 +388,32 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         this.pushPickState();
 
         await this.run(async () => {
-            const serverChanged = this.updateServerName(serverName);
-            if (serverChanged) {
-                this.pushTreeState();
-            }
+            const service = this.requireService();
+            this.log(`Starting Needle server-side pick. connection=${this.connectionLabel()}`);
+            this.setStatus(`正在目标进程内拾取 ${this.connectionLabel()}...`);
 
-            this.log(`Starting sniff sidecar pick. serverName=${this.currentServerName}`);
-            this.setStatus(`正在启动 Sniff sidecar 并准备拾取 ${this.currentServerName}...`);
-
-            const pickResult = await this.sidecarService.pickWidget(this.currentServerName);
-            if (pickResult.status === 'cancelled') {
+            const pickResult = await service.pickWidgets();
+            if (!pickResult.accepted || pickResult.widgetIds.length === 0) {
                 this.log('Widget picker cancelled by user.');
                 this.setStatus('已取消拾取');
                 return;
             }
 
-            this.log(
-                `Widget picked. count=${pickResult.widgetIds.length}, primaryWidgetId=${pickResult.primaryWidgetId}, ` +
-                `point=${pickResult.point[0]},${pickResult.point[1]}`
-            );
+            const primaryWidgetId = pickResult.widgetIds[pickResult.widgetIds.length - 1] || '';
+            this.log(`Widget picked. count=${pickResult.widgetIds.length}, primaryWidgetId=${primaryWidgetId}`);
 
-            const latestTree = await this.service.refreshTree();
+            const latestTree = await service.refreshTree();
             this.syncTreeState(latestTree, false);
-            await this.loadWidgetDetails(pickResult.primaryWidgetId);
+            await this.loadWidgetDetails(primaryWidgetId);
             this.postMessage({
                 command: 'applyExternalSelection',
                 widgetIds: pickResult.widgetIds,
-                primaryWidgetId: pickResult.primaryWidgetId
+                primaryWidgetId
             });
             this.setStatus(
                 pickResult.widgetIds.length > 1
                     ? `已拾取 ${pickResult.widgetIds.length} 个控件`
-                    : `已拾取控件 ${pickResult.primaryWidgetId}`
+                    : `已拾取控件 ${primaryWidgetId}`
             );
         }).finally(() => {
             this.pickInProgress = false;
@@ -242,7 +428,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
 
         await this.run(async () => {
             this.stateStore.setStatus('正在高亮控件');
-            await this.service.highlightWidget(widgetId);
+            await this.requireService().highlightWidget(widgetId);
             this.log(`Widget highlighted. widgetId=${widgetId}`);
             this.setStatus(`已高亮控件 ${widgetId}`);
             this.postMessage({
@@ -258,7 +444,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         }
 
         await this.run(async () => {
-            const widgetDef = await this.service.generateWidgetDef(widgetId);
+            const widgetDef = await this.requireService().generateWidgetDef(widgetId);
             this.log(
                 `widget_def generated. widgetId=${widgetId}, ` +
                 `matchCount=${widgetDef.matchCount}, occurrence=${widgetDef.occurrence}`
@@ -275,9 +461,10 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         }
 
         await this.run(async () => {
+            const service = this.requireService();
             const copyTexts: string[] = [];
             for (const widgetId of normalizedWidgetIds) {
-                const widgetDef = await this.service.generateWidgetDef(widgetId);
+                const widgetDef = await service.generateWidgetDef(widgetId);
                 const copyText = this.copyService.buildCopyText(widgetDef.widgetDef);
                 if (!copyText) {
                     continue;
@@ -301,7 +488,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
     private async findWidgets(widgetDefText: string): Promise<void> {
         await this.run(async () => {
             const widgetDef = JSON.parse(widgetDefText) as Record<string, unknown>;
-            const results = await this.service.searchWidgets(widgetDef);
+            const results = await this.requireService().searchWidgets(widgetDef);
             this.log(`Search completed. resultCount=${results.length}`);
             this.postMessage({
                 command: 'setSearchResults',
@@ -329,12 +516,19 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         }
     }
 
+    private pushConnectionState(): void {
+        this.postMessage({
+            command: 'setConnectionState',
+            connection: this.currentConnection || null
+        });
+    }
+
     private pushTreeState(): void {
         const treeState = this.stateStore.getTreeState();
         this.postMessage({
             command: 'setTree',
             tree: treeState.tree,
-            serverName: treeState.serverName,
+            connectionLabel: treeState.connectionLabel,
             resetState: false
         });
     }
@@ -389,31 +583,26 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         });
     }
 
-    private updateServerName(serverName: string): boolean {
-        const normalizedServerName = serverName.trim() || 'common';
-        if (normalizedServerName === this.currentServerName) {
-            return false;
-        }
-
-        this.log(`Server name changed. from=${this.currentServerName} to=${normalizedServerName}`);
-        this.currentServerName = normalizedServerName;
-        this.service = new SniffService(this.currentServerName);
-        this.stateStore.setServerName(this.currentServerName);
-        this.stateStore.clearSelection();
-        return true;
-    }
-
     private async loadWidgetDetails(widgetId: string): Promise<void> {
         this.stateStore.setSelection(widgetId);
-        const [widgetInfo, widgetDef] = await Promise.all([
-            this.service.getWidgetInfo(widgetId),
-            this.service.generateWidgetDef(widgetId)
+        const service = this.requireService();
+        const [widgetInfo, widgetDef, supportedProperties, supportedSignals, supportedSlots] = await Promise.all([
+            service.getWidgetInfo(widgetId),
+            service.generateWidgetDef(widgetId),
+            service.getSupportedProperties(widgetId),
+            service.getSupportedSignals(widgetId),
+            service.getSupportedSlots(widgetId)
         ]);
         this.log(
             `Widget selected. widgetId=${widgetId}, ` +
             `propertyCount=${Object.keys(widgetInfo.properties).length}, matchCount=${widgetDef.matchCount}`
         );
-        this.stateStore.setWidgetInfo(widgetId, widgetInfo.properties);
+        this.stateStore.setWidgetInfo(widgetId, {
+            ...widgetInfo.properties,
+            supportedProperties,
+            supportedSignals,
+            supportedSlots
+        });
         this.stateStore.setWidgetDef(widgetId, widgetDef.widgetDef, widgetDef.matchCount, widgetDef.occurrence);
     }
 
@@ -429,7 +618,7 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         this.postMessage({
             command: 'setTree',
             tree,
-            serverName: this.currentServerName,
+            connectionLabel: this.connectionLabel(),
             resetState
         });
     }
@@ -464,11 +653,11 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
         }
 
         this.autoRefreshTimer = setInterval(() => {
-            if (!this.view?.visible) {
+            if (!this.view?.visible || !this.service) {
                 return;
             }
 
-            void this.refresh(this.currentServerName, false);
+            void this.refresh(false);
         }, this.autoRefreshIntervalSeconds * 1000);
     }
 
@@ -493,6 +682,139 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
 
     private containsWidget(tree: SniffWidgetTreeNode[], widgetId: string): boolean {
         return tree.some(node => node.widgetId === widgetId || this.containsWidget(node.children, widgetId));
+    }
+
+    private requireService(): SniffService {
+        if (!this.service) {
+            throw new StructuredError({
+                error: '请先连接 Needle agent。',
+                errorType: 'NeedleNotConnected'
+            });
+        }
+        return this.service;
+    }
+
+    private async pickLoadAppTarget(defaultTargetExe: string, title = '选择 Needle LoadApp 目标程序'): Promise<string | undefined> {
+        const filters: Record<string, string[]> = {};
+        filters['Windows Executable'] = ['exe'];
+        filters['All Files'] = ['*'];
+        const selected = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            defaultUri: this.defaultLoadAppUri(defaultTargetExe),
+            filters,
+            title
+        });
+        return selected?.[0]?.fsPath;
+    }
+
+    private defaultLoadAppUri(targetExeValue: string): vscode.Uri | undefined {
+        const targetExe = targetExeValue.trim();
+        if (!targetExe) {
+            return undefined;
+        }
+        return vscode.Uri.file(targetExe);
+    }
+
+    private getLoadAppProfiles(): LoadAppProfile[] {
+        const rawProfiles = vscode.workspace
+            .getConfiguration('path.sniff')
+            .get<unknown[]>(SniffWebviewProvider.loadAppProfilesSettingName, []);
+        if (!Array.isArray(rawProfiles)) {
+            return [];
+        }
+
+        const profiles: LoadAppProfile[] = [];
+        for (const rawProfile of rawProfiles) {
+            if (!this.isRecord(rawProfile)) {
+                continue;
+            }
+
+            const name = String(rawProfile['name'] || '').trim();
+            const targetExe = String(rawProfile['targetExe'] || '').trim();
+            const targetArgs = String(rawProfile['targetArgs'] || '');
+            if (!name || !targetExe) {
+                continue;
+            }
+
+            profiles.push({ name, targetExe, targetArgs });
+        }
+
+        return profiles;
+    }
+
+    private async updateLoadAppProfiles(profiles: LoadAppProfile[]): Promise<void> {
+        await vscode.workspace
+            .getConfiguration('path.sniff')
+            .update(SniffWebviewProvider.loadAppProfilesSettingName, profiles, vscode.ConfigurationTarget.Global);
+    }
+
+    private async pickLoadAppProfileFromSettings(
+        placeHolder: string,
+        profiles = this.getLoadAppProfiles()
+    ): Promise<LoadAppProfile | undefined> {
+        if (profiles.length === 0) {
+            void vscode.window.showInformationMessage('暂无 LoadApp 配置，请先新建。');
+            return undefined;
+        }
+
+        const picked = await vscode.window.showQuickPick(
+            profiles.map(profile => ({
+                label: profile.name,
+                description: profile.targetExe,
+                detail: profile.targetArgs || undefined,
+                profile
+            })),
+            {
+                placeHolder,
+                matchOnDescription: true,
+                matchOnDetail: true
+            }
+        );
+        return picked?.profile;
+    }
+
+    private async promptProfileName(title: string, value: string): Promise<string | undefined> {
+        const name = await vscode.window.showInputBox({
+            title,
+            prompt: '配置名会保存到 path.sniff.loadappProfiles。',
+            value,
+            validateInput: input => input.trim() ? undefined : '请输入配置名'
+        });
+        return name?.trim();
+    }
+
+    private applyLoadAppProfile(profile: LoadAppProfile): void {
+        this.postMessage({
+            command: 'setLoadAppProfile',
+            connection: {
+                mode: 'loadapp',
+                targetExe: profile.targetExe,
+                targetArgs: profile.targetArgs
+            },
+            force: true
+        });
+    }
+
+    private normalizeLoadAppRequest(request?: SniffConnectionRequest): { targetExe: string; targetArgs: string } {
+        return {
+            targetExe: String(request?.targetExe || '').trim(),
+            targetArgs: String(request?.targetArgs || '')
+        };
+    }
+
+    private profileNameFromTarget(targetExe: string): string {
+        const baseName = path.basename(targetExe, path.extname(targetExe)).trim();
+        return baseName || 'LoadApp';
+    }
+
+    private isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
+    }
+
+    private connectionLabel(): string {
+        return this.currentConnection?.label || '未连接';
     }
 
     private log(message: string): void {

@@ -34,3 +34,29 @@ export interface SniffWidgetAtPointResult {
     position: [number, number];
     size: [number, number];
 }
+
+export interface SniffPickResult {
+    accepted: boolean;
+    widgetIds: string[];
+    widgets: Array<Record<string, unknown>>;
+}
+
+export interface SniffSupportedProperty {
+    name?: string;
+    type?: string;
+    value?: unknown;
+}
+
+export interface SniffSupportedSignal {
+    name?: string;
+    signature?: string;
+    returnType?: string;
+    arguments?: string[];
+}
+
+export interface SniffSupportedSlot {
+    name?: string;
+    signature?: string;
+    returnType?: string;
+    arguments?: string[];
+}
