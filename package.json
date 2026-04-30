@@ -17,7 +17,9 @@
     "onCommand:methodsViewer.refresh",
     "onCommand:pathFileTree.refresh",
     "onCommand:pathSniffViewer.refresh",
-    "onCommand:pathSniffViewer.toggleAutoRefresh"
+    "onCommand:pathSniffViewer.toggleAutoRefresh",
+    "onCommand:pathZentaoTree.refresh",
+    "onCommand:pathZentaoTree.login"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -66,6 +68,12 @@
         {
           "id": "pathFileTree",
           "name": "PATH 文件树",
+          "when": "true",
+          "icon": "resources/icons/file-tree.svg"
+        },
+        {
+          "id": "pathZentaoTree",
+          "name": "禅道工单",
           "when": "true",
           "icon": "resources/icons/file-tree.svg"
         }
@@ -251,6 +259,25 @@
       {
         "command": "eleTreeViewer.aiAgentGeneration",
         "title": "Agent Generation"
+      },
+      {
+        "command": "pathZentaoTree.refresh",
+        "title": "刷新禅道工单",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pathZentaoTree.login",
+        "title": "登录禅道",
+        "icon": "$(account)"
+      },
+      {
+        "command": "pathZentaoTree.logout",
+        "title": "退出禅道",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "pathZentaoTree.openItem",
+        "title": "打开禅道工单"
       }
     ],
     "menus": {
@@ -274,6 +301,21 @@
           "command": "pathSniffViewer.refresh",
           "when": "view == pathSniffViewer",
           "group": "navigation"
+        },
+        {
+          "command": "pathZentaoTree.refresh",
+          "when": "view == pathZentaoTree",
+          "group": "navigation"
+        },
+        {
+          "command": "pathZentaoTree.login",
+          "when": "view == pathZentaoTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pathZentaoTree.logout",
+          "when": "view == pathZentaoTree",
+          "group": "navigation@2"
         },
         {
           "command": "pathFileTree.newFile",
@@ -401,6 +443,11 @@
           "command": "pathFileTree.findInFolder",
           "when": "view == pathFileTree && viewItem == pathFileTreeFolder",
           "group": "3_search"
+        },
+        {
+          "command": "pathZentaoTree.openItem",
+          "when": "view == pathZentaoTree && viewItem == pathZentaoItem",
+          "group": "inline"
         }
       ],
       "explorer/context": [
@@ -609,10 +656,13 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "build:sniff-sidecar": "python .\\tools\\pathsniff-sidecar\\build_sidecar.py --output-root .\\resources\\sniff-sidecar",
+    "build:sniff-sidecar": "node .\\tools\\build-sniff-sidecar-from-scout.js",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts"
+    "lint": "eslint src --ext ts",
+    "test:architecture": "node --test test/architecture/*.test.mjs",
+    "test:smoke": "npm run compile && node --test test/smoke/*.test.mjs",
+    "test": "npm run test:architecture && npm run test:smoke"
   },
   "files": [
     "out/**/*",

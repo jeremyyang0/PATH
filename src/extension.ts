@@ -1,17 +1,23 @@
 import * as vscode from 'vscode';
-import { registerAiFeature } from './features/ai/register/registerAiFeature';
-import { registerEleTreeFeature } from './features/ele-tree/register/registerEleTreeFeature';
-import { registerMethodsTreeFeature } from './features/methods-tree/register/registerMethodsTreeFeature';
-import { registerPathFileTreeFeature } from './features/path-file-tree/register/registerPathFileTreeFeature';
-import { registerSecondaryViewFeature } from './features/secondary-view/register/registerSecondaryViewFeature';
-import { registerSniffFeature } from './features/sniff/register/registerSniffFeature';
-import { registerWorkbenchFeature } from './features/workbench/register/registerWorkbenchFeature';
-import { createZentaoSaveHandler } from './features/zentao/register/registerZentaoFeature';
-import { registerWorkspaceRefresh } from './shared/workspace/registerWorkspaceRefresh';
+import { createKernelContext } from './kernel/bootstrap/extension-bootstrap';
+import { registerAiFeature } from './modules/ai';
+import { registerEleTreeFeature } from './modules/element-tree';
+import { registerMethodsTreeFeature } from './modules/method-tree';
+import { registerPathFileTreeFeature } from './modules/workspace-tree';
+import { registerSecondaryViewFeature, registerWorkbenchFeature } from './modules/workbench';
+import { registerZentaoModule } from './modules/zentao';
+import { registerSniffFeature } from './modules/sniff';
+import { registerWorkspaceRefresh } from './platform/workspace/registerWorkspaceRefresh';
 
 export function activate(context: vscode.ExtensionContext): void {
+    // 扩展入口只负责装配模块与生命周期，避免业务逻辑继续堆进 composition root。
+    createKernelContext(context);
+
     // 先注册基础树视图，后续 feature 通过依赖项互相联动。
-    const pathFileTreeFeature = registerPathFileTreeFeature(context);
+    const zentaoModule = registerZentaoModule(context);
+    const pathFileTreeFeature = registerPathFileTreeFeature(context, {
+        loadZentaoCaseById: zentaoModule.getCase
+    });
     const eleTreeFeature = registerEleTreeFeature(context, {
         revealFileInPathTree: pathFileTreeFeature.revealFileInTree
     });
@@ -29,7 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
             refreshEleTree: eleTreeFeature.refresh,
             refreshMethodsTree: methodsTreeFeature.refresh,
             refreshPathFileTree: pathFileTreeFeature.refresh,
-            onPythonTestFileSaved: createZentaoSaveHandler()
+            onPythonTestFileSaved: zentaoModule.onPythonTestFileSaved
         })
     );
 

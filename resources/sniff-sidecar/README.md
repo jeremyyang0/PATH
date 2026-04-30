@@ -10,5 +10,6 @@ PATH Sniff sidecar artifacts are packaged per platform under a single shared bun
 Build command:
 
 ```powershell
-python .\tools\pathsniff-sidecar\build_sidecar.py --output-root .\resources\sniff-sidecar
+$env:SCOUT_ROOT="F:\path\to\scout"
+npm run build:sniff-sidecar
 ```

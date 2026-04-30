@@ -1,17 +1,17 @@
 import * as vscode from 'vscode';
-import { TreeItem } from './treeItem';
+import { CodePathDraggableNode } from './codePathDraggableNode';
 
 /**
  * 拖拽控制器
  */
-export class DragAndDropController implements vscode.TreeDragAndDropController<TreeItem> {
+export class DragAndDropController<T extends CodePathDraggableNode> implements vscode.TreeDragAndDropController<T> {
     public readonly dropMimeTypes = ['text/plain'];
     public readonly dragMimeTypes = ['text/plain'];
 
     public async handleDrag(
-        source: readonly TreeItem[], 
-        dataTransfer: vscode.DataTransfer, 
-        token: vscode.CancellationToken
+        source: readonly T[],
+        dataTransfer: vscode.DataTransfer,
+        _token: vscode.CancellationToken
     ): Promise<void> {
         const dragTexts: string[] = [];
         
@@ -28,9 +28,9 @@ export class DragAndDropController implements vscode.TreeDragAndDropController<T
     }
 
     public async handleDrop(
-        target: TreeItem | undefined, 
-        dataTransfer: vscode.DataTransfer, 
-        token: vscode.CancellationToken
+        _target: T | undefined,
+        _dataTransfer: vscode.DataTransfer,
+        _token: vscode.CancellationToken
     ): Promise<void> {
         // 这里可以处理拖拽到树视图的逻辑，暂时不需要
         return;

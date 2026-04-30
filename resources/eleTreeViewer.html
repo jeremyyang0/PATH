@@ -353,6 +353,46 @@
             display: none;
         }
 
+        /* Context Menu */
+        .context-menu {
+            position: fixed;
+            min-width: 180px;
+            background-color: var(--vscode-menu-background, var(--vscode-editor-background));
+            border: 1px solid var(--vscode-menu-border, var(--border-color));
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-md);
+            padding: 4px 0;
+            z-index: 9999;
+        }
+
+        .context-menu.hidden {
+            display: none;
+        }
+
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 6px 12px;
+            border: none;
+            background: transparent;
+            color: var(--vscode-menu-foreground, var(--vscode-foreground));
+            font-size: 12px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .context-menu-item:hover {
+            background-color: var(--vscode-menu-selectionBackground, var(--bg-hover));
+            color: var(--vscode-menu-selectionForeground, var(--vscode-foreground));
+        }
+
+        .context-menu-separator {
+            height: 1px;
+            margin: 4px 0;
+            background-color: var(--vscode-menu-separatorBackground, var(--border-color));
+        }
+
         /* Scrollbar */
         ::-webkit-scrollbar {
             width: 10px;
@@ -409,6 +449,8 @@
             <div>正在加载数据...</div>
         </div>
     </div>
+
+    <div id="contextMenu" class="context-menu hidden"></div>
 
     <script src="eleTreeViewer.js"></script>
 </body>

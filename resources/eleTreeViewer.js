@@ -11,6 +11,7 @@ let expandedItems = new Set();
 let currentSearchKeyword = '';
 let isAllExpanded = false;
 let shouldExpandOnUpdate = false;
+let currentContextTarget = null;
 
 class DragDropManager {
     constructor() {
@@ -320,6 +321,183 @@ function toggleExpand(treePath) {
     renderTree();
 }
 
+function hideContextMenu() {
+    const menu = document.getElementById('contextMenu');
+    if (!menu) {
+        return;
+    }
+
+    menu.classList.add('hidden');
+    menu.innerHTML = '';
+    currentContextTarget = null;
+}
+
+function createElementPayloadFromTreeItem(itemElement) {
+    return {
+        label: itemElement.getAttribute('data-label') || itemElement.querySelector('.tree-label')?.textContent || '',
+        fullPath: itemElement.getAttribute('data-path') || '',
+        eleFilePath: itemElement.getAttribute('data-filepath') || '',
+        eleVariableName: itemElement.getAttribute('data-variablename') || ''
+    };
+}
+
+function collectElementPayloads(node, bucket) {
+    if (!node) {
+        return;
+    }
+
+    if (getNodeType(node) === 'element' && node.eleFilePath && node.eleVariableName) {
+        bucket.push({
+            label: node.label || node.eleVariableName,
+            fullPath: node.fullPath || '',
+            eleFilePath: node.eleFilePath,
+            eleVariableName: node.eleVariableName
+        });
+    }
+
+    if (Array.isArray(node.children)) {
+        for (const child of node.children) {
+            collectElementPayloads(child, bucket);
+        }
+    }
+}
+
+function buildFolderElementPayloads(treePath) {
+    const node = findNodeByPath(treeData, treePath);
+    if (!node) {
+        return [];
+    }
+
+    const payloads = [];
+    collectElementPayloads(node, payloads);
+    return payloads;
+}
+
+function addContextMenuAction(menu, label, handler) {
+    const button = document.createElement('button');
+    button.className = 'context-menu-item';
+    button.textContent = label;
+    button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        hideContextMenu();
+        handler();
+    });
+    menu.appendChild(button);
+}
+
+function addContextMenuSeparator(menu) {
+    const separator = document.createElement('div');
+    separator.className = 'context-menu-separator';
+    menu.appendChild(separator);
+}
+
+/**
+ * 恢复元素树自定义右键菜单，元素节点支持单个生成，目录节点支持批量生成。
+ */
+function showContextMenu(clientX, clientY, itemElement) {
+    const menu = document.getElementById('contextMenu');
+    if (!menu) {
+        return;
+    }
+
+    const nodeType = itemElement.getAttribute('data-nodetype');
+    const treePath = itemElement.getAttribute('data-path') || '';
+    const codePath = itemElement.getAttribute('data-codepath') || '';
+    const filePath = itemElement.getAttribute('data-filepath') || '';
+    const lineNumber = parseInt(itemElement.getAttribute('data-line') || '1', 10) || 1;
+
+    menu.innerHTML = '';
+    currentContextTarget = itemElement;
+
+    if (nodeType === 'element') {
+        const elementPayload = createElementPayloadFromTreeItem(itemElement);
+        addContextMenuAction(menu, '打开文件', () => {
+            if (vscode && filePath) {
+                vscode.postMessage({
+                    command: 'openFile',
+                    filePath,
+                    lineNumber
+                });
+            }
+        });
+        addContextMenuAction(menu, '插入到编辑器', () => {
+            if (vscode && codePath) {
+                vscode.postMessage({
+                    command: 'dragToEditor',
+                    codePath
+                });
+            }
+        });
+        addContextMenuSeparator(menu);
+        addContextMenuAction(menu, '生成点击方法', () => {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'addOperation',
+                    element: elementPayload,
+                    operationType: 'click'
+                });
+            }
+        });
+        addContextMenuAction(menu, '生成双击方法', () => {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'addOperation',
+                    element: elementPayload,
+                    operationType: 'double_click'
+                });
+            }
+        });
+    } else if (nodeType === 'folder') {
+        const elements = buildFolderElementPayloads(treePath);
+        if (elements.length === 0) {
+            return;
+        }
+
+        addContextMenuAction(menu, `批量生成点击方法 (${elements.length})`, () => {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'batchAddOperation',
+                    elements,
+                    operationType: 'click'
+                });
+            }
+        });
+        addContextMenuAction(menu, `批量生成双击方法 (${elements.length})`, () => {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'batchAddOperation',
+                    elements,
+                    operationType: 'double_click'
+                });
+            }
+        });
+        addContextMenuAction(menu, `批量生成点击+双击 (${elements.length})`, () => {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'batchAddOperation',
+                    elements,
+                    operationType: 'all'
+                });
+            }
+        });
+    } else {
+        return;
+    }
+
+    selectItem(treePath);
+    menu.classList.remove('hidden');
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const menuWidth = menu.offsetWidth || 180;
+    const menuHeight = menu.offsetHeight || 120;
+    const left = Math.min(clientX, viewportWidth - menuWidth - 8);
+    const top = Math.min(clientY, viewportHeight - menuHeight - 8);
+    menu.style.left = `${Math.max(8, left)}px`;
+    menu.style.top = `${Math.max(8, top)}px`;
+}
+
 function selectItem(treePath) {
     const selected = document.querySelector('.tree-item.selected');
     if (selected) {
@@ -514,6 +692,33 @@ document.addEventListener('DOMContentLoaded', () => {
     new DragDropManager();
     restoreState();
     updateToggleBtnState();
+    document.addEventListener('contextmenu', event => {
+        const target = event.target.closest('.tree-item');
+        if (!target) {
+            hideContextMenu();
+            return;
+        }
+
+        const nodeType = target.getAttribute('data-nodetype');
+        if (nodeType !== 'element' && nodeType !== 'folder') {
+            hideContextMenu();
+            return;
+        }
+
+        event.preventDefault();
+        showContextMenu(event.clientX, event.clientY, target);
+    });
+    document.addEventListener('click', event => {
+        if (!event.target.closest('#contextMenu')) {
+            hideContextMenu();
+        }
+    });
+    document.addEventListener('scroll', hideContextMenu, true);
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            hideContextMenu();
+        }
+    });
     showDebugStatus('Ele Tree 前端已启动，等待扩展数据...');
     if (vscode) {
         vscode.postMessage({ command: 'ready' });
