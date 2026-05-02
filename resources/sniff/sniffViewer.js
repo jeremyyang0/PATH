@@ -13,6 +13,10 @@ let autoRefreshIntervalSeconds = 5;
 let pickInProgress = false;
 let ctrlMultiSelectActive = false;
 let restoredConnectionForm = false;
+let loadAppProfiles = [];
+let selectedLoadAppProfileName = '';
+let loadAppManagerView = 'list';
+let loadAppEditOriginalName = '';
 
 const elements = {
     treeContainer: document.getElementById('treeContainer'),
@@ -26,13 +30,23 @@ const elements = {
     hostInput: document.getElementById('hostInput'),
     portInput: document.getElementById('portInput'),
     pidInput: document.getElementById('pidInput'),
-    targetExeInput: document.getElementById('targetExeInput'),
-    targetArgsInput: document.getElementById('targetArgsInput'),
-    chooseTargetExeButton: document.getElementById('chooseTargetExeButton'),
-    newLoadAppProfileButton: document.getElementById('newLoadAppProfileButton'),
-    loadLoadAppProfileButton: document.getElementById('loadLoadAppProfileButton'),
-    editLoadAppProfileButton: document.getElementById('editLoadAppProfileButton'),
-    deleteLoadAppProfileButton: document.getElementById('deleteLoadAppProfileButton'),
+    loadAppProfileSelect: document.getElementById('loadAppProfileSelect'),
+    manageLoadAppProfilesButton: document.getElementById('manageLoadAppProfilesButton'),
+    loadAppManagerModal: document.getElementById('loadAppManagerModal'),
+    loadAppManagerTitle: document.getElementById('loadAppManagerTitle'),
+    loadAppManagerListView: document.getElementById('loadAppManagerListView'),
+    loadAppManagerEditView: document.getElementById('loadAppManagerEditView'),
+    loadAppManagerListFooter: document.getElementById('loadAppManagerListFooter'),
+    loadAppManagerEditFooter: document.getElementById('loadAppManagerEditFooter'),
+    loadAppManagerProfileList: document.getElementById('loadAppManagerProfileList'),
+    loadAppManagerNewButton: document.getElementById('loadAppManagerNewButton'),
+    loadAppManagerCloseButton: document.getElementById('loadAppManagerCloseButton'),
+    loadAppManagerCancelEditButton: document.getElementById('loadAppManagerCancelEditButton'),
+    loadAppManagerSaveEditButton: document.getElementById('loadAppManagerSaveEditButton'),
+    loadAppEditNameInput: document.getElementById('loadAppEditNameInput'),
+    loadAppEditTargetExeInput: document.getElementById('loadAppEditTargetExeInput'),
+    loadAppEditArgsInput: document.getElementById('loadAppEditArgsInput'),
+    loadAppEditPickExeButton: document.getElementById('loadAppEditPickExeButton'),
     connectButton: document.getElementById('connectButton'),
     connectionLabel: document.getElementById('connectionLabel'),
     autoRefreshToggle: document.getElementById('autoRefreshToggle'),
@@ -101,8 +115,7 @@ function saveState() {
         host: elements.hostInput ? elements.hostInput.value : '',
         port: elements.portInput ? elements.portInput.value : '',
         pid: elements.pidInput ? elements.pidInput.value : '',
-        targetExe: elements.targetExeInput ? elements.targetExeInput.value : '',
-        targetArgs: elements.targetArgsInput ? elements.targetArgsInput.value : '',
+        selectedLoadAppProfileName,
         autoRefreshEnabled,
         autoRefreshIntervalSeconds
     });
@@ -150,13 +163,8 @@ function restoreState() {
         restoredConnectionForm = true;
     }
 
-    if (typeof state.targetExe === 'string' && elements.targetExeInput) {
-        elements.targetExeInput.value = state.targetExe;
-        restoredConnectionForm = true;
-    }
-
-    if (typeof state.targetArgs === 'string' && elements.targetArgsInput) {
-        elements.targetArgsInput.value = state.targetArgs;
+    if (typeof state.selectedLoadAppProfileName === 'string') {
+        selectedLoadAppProfileName = state.selectedLoadAppProfileName;
         restoredConnectionForm = true;
     }
 
@@ -349,10 +357,12 @@ function getConnectionRequest() {
         };
     }
     if (mode === 'loadapp') {
+        const profile = findLoadAppProfileByName(selectedLoadAppProfileName);
         return {
             mode,
-            targetExe: elements.targetExeInput ? elements.targetExeInput.value.trim() : '',
-            targetArgs: elements.targetArgsInput ? elements.targetArgsInput.value : ''
+            profileName: selectedLoadAppProfileName,
+            targetExe: profile ? profile.targetExe : '',
+            targetArgs: profile ? profile.targetArgs : ''
         };
     }
     return {
@@ -392,11 +402,9 @@ function applyConnectionForm(connection, force = false) {
     if (connection.pid !== undefined && elements.pidInput) {
         elements.pidInput.value = Number(connection.pid) > 0 ? String(connection.pid) : '';
     }
-    if (connection.targetExe !== undefined && elements.targetExeInput) {
-        elements.targetExeInput.value = String(connection.targetExe || '');
-    }
-    if (connection.targetArgs !== undefined && elements.targetArgsInput) {
-        elements.targetArgsInput.value = String(connection.targetArgs || '');
+    if (typeof connection.profileName === 'string') {
+        selectedLoadAppProfileName = connection.profileName;
+        syncLoadAppProfileSelect();
     }
     restoredConnectionForm = true;
     syncConnectionFields();
@@ -412,40 +420,243 @@ function connectNeedle() {
     });
 }
 
-function createLoadAppProfile() {
+function findLoadAppProfileByName(name) {
+    if (!name) {
+        return null;
+    }
+    return loadAppProfiles.find(profile => profile.name === name) || null;
+}
+
+// 同步 LoadApp 配置下拉框，保证前端选中项始终对应有效配置。
+function syncLoadAppProfileSelect() {
+    const select = elements.loadAppProfileSelect;
+    if (!select) {
+        return;
+    }
+
+    const previousValue = selectedLoadAppProfileName;
+    select.innerHTML = '';
+
+    if (loadAppProfiles.length === 0) {
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = '暂无配置（点击 管理配置 新建）';
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        select.appendChild(placeholder);
+        selectedLoadAppProfileName = '';
+        return;
+    }
+
+    for (const profile of loadAppProfiles) {
+        const option = document.createElement('option');
+        option.value = profile.name;
+        option.textContent = profile.name;
+        select.appendChild(option);
+    }
+
+    if (previousValue && loadAppProfiles.some(profile => profile.name === previousValue)) {
+        select.value = previousValue;
+        selectedLoadAppProfileName = previousValue;
+    } else {
+        select.value = loadAppProfiles[0].name;
+        selectedLoadAppProfileName = loadAppProfiles[0].name;
+    }
+}
+
+// 规范化扩展端返回的配置列表，并刷新下拉框与管理弹窗。
+function setLoadAppProfiles(profiles, preferredSelectedName) {
+    loadAppProfiles = Array.isArray(profiles)
+        ? profiles
+            .filter(profile => profile && typeof profile.name === 'string' && profile.name)
+            .map(profile => ({
+                name: String(profile.name),
+                targetExe: String(profile.targetExe || ''),
+                targetArgs: String(profile.targetArgs || '')
+            }))
+        : [];
+
+    if (typeof preferredSelectedName === 'string' && preferredSelectedName) {
+        selectedLoadAppProfileName = preferredSelectedName;
+    }
+
+    syncLoadAppProfileSelect();
+    if (loadAppManagerView === 'list' && elements.loadAppManagerModal && elements.loadAppManagerModal.classList.contains('visible')) {
+        renderLoadAppManagerList();
+    }
     saveState();
+}
+
+// 打开配置管理弹窗时主动拉取最新配置，避免展示过期状态。
+function openLoadAppManager() {
+    if (!elements.loadAppManagerModal) {
+        return;
+    }
+    showLoadAppManagerListView();
+    elements.loadAppManagerModal.classList.add('visible');
+    postToExtensionHost({ command: 'getLoadAppProfiles' });
+}
+
+function closeLoadAppManager() {
+    if (!elements.loadAppManagerModal) {
+        return;
+    }
+    elements.loadAppManagerModal.classList.remove('visible');
+}
+
+function showLoadAppManagerListView() {
+    loadAppManagerView = 'list';
+    if (elements.loadAppManagerListView) {
+        elements.loadAppManagerListView.hidden = false;
+    }
+    if (elements.loadAppManagerEditView) {
+        elements.loadAppManagerEditView.hidden = true;
+    }
+    if (elements.loadAppManagerListFooter) {
+        elements.loadAppManagerListFooter.hidden = false;
+    }
+    if (elements.loadAppManagerEditFooter) {
+        elements.loadAppManagerEditFooter.hidden = true;
+    }
+    if (elements.loadAppManagerTitle) {
+        elements.loadAppManagerTitle.textContent = 'LoadApp 配置管理';
+    }
+    renderLoadAppManagerList();
+}
+
+function showLoadAppManagerEditView(profile) {
+    loadAppManagerView = 'edit';
+    loadAppEditOriginalName = profile && profile.name ? profile.name : '';
+
+    if (elements.loadAppEditNameInput) {
+        elements.loadAppEditNameInput.value = profile ? profile.name : '';
+    }
+    if (elements.loadAppEditTargetExeInput) {
+        elements.loadAppEditTargetExeInput.value = profile ? profile.targetExe : '';
+    }
+    if (elements.loadAppEditArgsInput) {
+        elements.loadAppEditArgsInput.value = profile ? profile.targetArgs : '';
+    }
+
+    if (elements.loadAppManagerListView) {
+        elements.loadAppManagerListView.hidden = true;
+    }
+    if (elements.loadAppManagerEditView) {
+        elements.loadAppManagerEditView.hidden = false;
+    }
+    if (elements.loadAppManagerListFooter) {
+        elements.loadAppManagerListFooter.hidden = true;
+    }
+    if (elements.loadAppManagerEditFooter) {
+        elements.loadAppManagerEditFooter.hidden = false;
+    }
+    if (elements.loadAppManagerTitle) {
+        elements.loadAppManagerTitle.textContent = loadAppEditOriginalName ? '编辑 LoadApp 配置' : '新建 LoadApp 配置';
+    }
+
+    if (elements.loadAppEditNameInput) {
+        elements.loadAppEditNameInput.focus();
+    }
+}
+
+function renderLoadAppManagerList() {
+    const container = elements.loadAppManagerProfileList;
+    if (!container) {
+        return;
+    }
+
+    container.innerHTML = '';
+
+    if (loadAppProfiles.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'profile-list-empty';
+        empty.textContent = '暂无配置，点击右上角"新建"添加。';
+        container.appendChild(empty);
+        return;
+    }
+
+    for (const profile of loadAppProfiles) {
+        const row = document.createElement('div');
+        row.className = 'profile-row';
+
+        const meta = document.createElement('div');
+        meta.className = 'profile-row-meta';
+
+        const name = document.createElement('div');
+        name.className = 'profile-row-name';
+        name.textContent = profile.name;
+        meta.appendChild(name);
+
+        const detail = document.createElement('div');
+        detail.className = 'profile-row-detail';
+        detail.textContent = profile.targetArgs
+            ? `${profile.targetExe}  |  ${profile.targetArgs}`
+            : profile.targetExe;
+        detail.title = detail.textContent;
+        meta.appendChild(detail);
+
+        const editButton = document.createElement('button');
+        editButton.className = 'button secondary compact-button';
+        editButton.type = 'button';
+        editButton.textContent = '编辑';
+        editButton.addEventListener('click', () => {
+            showLoadAppManagerEditView({ ...profile });
+        });
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'button secondary compact-button';
+        deleteButton.type = 'button';
+        deleteButton.textContent = '删除';
+        deleteButton.addEventListener('click', () => {
+            if (window.confirm(`确定删除 LoadApp 配置 "${profile.name}"？`)) {
+                postToExtensionHost({
+                    command: 'removeLoadAppProfile',
+                    name: profile.name
+                });
+            }
+        });
+
+        row.appendChild(meta);
+        row.appendChild(editButton);
+        row.appendChild(deleteButton);
+        container.appendChild(row);
+    }
+}
+
+// 提交前校验配置名称和 target.exe，校验通过后交给扩展端持久化。
+function submitLoadAppEditForm() {
+    const name = (elements.loadAppEditNameInput ? elements.loadAppEditNameInput.value : '').trim();
+    const targetExe = (elements.loadAppEditTargetExeInput ? elements.loadAppEditTargetExeInput.value : '').trim();
+    const targetArgs = elements.loadAppEditArgsInput ? elements.loadAppEditArgsInput.value : '';
+
+    if (!name) {
+        window.alert('请填写配置名称。');
+        if (elements.loadAppEditNameInput) {
+            elements.loadAppEditNameInput.focus();
+        }
+        return;
+    }
+
+    if (!targetExe) {
+        window.alert('请选择或输入 target.exe 的路径。');
+        if (elements.loadAppEditTargetExeInput) {
+            elements.loadAppEditTargetExeInput.focus();
+        }
+        return;
+    }
+
     postToExtensionHost({
-        command: 'createLoadAppProfile',
-        connection: getConnectionRequest()
+        command: 'upsertLoadAppProfile',
+        originalName: loadAppEditOriginalName,
+        profile: { name, targetExe, targetArgs }
     });
 }
 
-function loadLoadAppProfile() {
-    saveState();
+function pickLoadAppExeForEdit() {
+    const currentPath = elements.loadAppEditTargetExeInput ? elements.loadAppEditTargetExeInput.value : '';
     postToExtensionHost({
-        command: 'loadLoadAppProfile'
-    });
-}
-
-function editLoadAppProfile() {
-    saveState();
-    postToExtensionHost({
-        command: 'editLoadAppProfile'
-    });
-}
-
-function deleteLoadAppProfile() {
-    saveState();
-    postToExtensionHost({
-        command: 'deleteLoadAppProfile'
-    });
-}
-
-function chooseLoadAppTarget() {
-    saveState();
-    postToExtensionHost({
-        command: 'chooseLoadAppTarget',
-        connection: getConnectionRequest()
+        command: 'pickLoadAppExe',
+        currentPath
     });
 }
 
@@ -706,33 +917,66 @@ if (elements.connectButton) {
     });
 }
 
-if (elements.chooseTargetExeButton) {
-    elements.chooseTargetExeButton.addEventListener('click', () => {
-        chooseLoadAppTarget();
+if (elements.loadAppProfileSelect) {
+    elements.loadAppProfileSelect.addEventListener('change', event => {
+        selectedLoadAppProfileName = String(event.target.value || '');
+        saveState();
     });
 }
 
-if (elements.newLoadAppProfileButton) {
-    elements.newLoadAppProfileButton.addEventListener('click', () => {
-        createLoadAppProfile();
+if (elements.manageLoadAppProfilesButton) {
+    elements.manageLoadAppProfilesButton.addEventListener('click', () => {
+        openLoadAppManager();
     });
 }
 
-if (elements.loadLoadAppProfileButton) {
-    elements.loadLoadAppProfileButton.addEventListener('click', () => {
-        loadLoadAppProfile();
+if (elements.loadAppManagerNewButton) {
+    elements.loadAppManagerNewButton.addEventListener('click', () => {
+        showLoadAppManagerEditView(null);
     });
 }
 
-if (elements.editLoadAppProfileButton) {
-    elements.editLoadAppProfileButton.addEventListener('click', () => {
-        editLoadAppProfile();
+if (elements.loadAppManagerCloseButton) {
+    elements.loadAppManagerCloseButton.addEventListener('click', () => {
+        closeLoadAppManager();
     });
 }
 
-if (elements.deleteLoadAppProfileButton) {
-    elements.deleteLoadAppProfileButton.addEventListener('click', () => {
-        deleteLoadAppProfile();
+if (elements.loadAppManagerCancelEditButton) {
+    elements.loadAppManagerCancelEditButton.addEventListener('click', () => {
+        showLoadAppManagerListView();
+    });
+}
+
+if (elements.loadAppManagerSaveEditButton) {
+    elements.loadAppManagerSaveEditButton.addEventListener('click', () => {
+        submitLoadAppEditForm();
+    });
+}
+
+if (elements.loadAppEditPickExeButton) {
+    elements.loadAppEditPickExeButton.addEventListener('click', () => {
+        pickLoadAppExeForEdit();
+    });
+}
+
+if (elements.loadAppManagerModal) {
+    elements.loadAppManagerModal.addEventListener('click', event => {
+        if (event.target === elements.loadAppManagerModal) {
+            closeLoadAppManager();
+        }
+    });
+}
+
+for (const input of [elements.loadAppEditNameInput, elements.loadAppEditTargetExeInput, elements.loadAppEditArgsInput]) {
+    if (!input) {
+        continue;
+    }
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            submitLoadAppEditForm();
+        }
     });
 }
 
@@ -757,7 +1001,7 @@ if (elements.connectionModeSelect) {
     });
 }
 
-for (const input of [elements.hostInput, elements.portInput, elements.pidInput, elements.targetArgsInput]) {
+for (const input of [elements.hostInput, elements.portInput, elements.pidInput]) {
     if (!input) {
         continue;
     }
@@ -1063,17 +1307,23 @@ window.addEventListener('message', event => {
                 if (message.connection.pid && elements.pidInput) {
                     elements.pidInput.value = String(message.connection.pid);
                 }
-                if (message.connection.targetExe !== undefined && elements.targetExeInput) {
-                    elements.targetExeInput.value = String(message.connection.targetExe || '');
-                }
-                if (message.connection.targetArgs !== undefined && elements.targetArgsInput) {
-                    elements.targetArgsInput.value = String(message.connection.targetArgs || '');
+                if (typeof message.connection.profileName === 'string') {
+                    selectedLoadAppProfileName = message.connection.profileName;
+                    syncLoadAppProfileSelect();
                 }
                 saveState();
             }
             break;
         case 'setLoadAppProfile':
             applyConnectionForm(message.connection || null, Boolean(message.force));
+            break;
+        case 'setLoadAppProfiles':
+            setLoadAppProfiles(message.profiles, typeof message.selectedName === 'string' ? message.selectedName : undefined);
+            break;
+        case 'setLoadAppPickedExe':
+            if (loadAppManagerView === 'edit' && elements.loadAppEditTargetExeInput && typeof message.path === 'string' && message.path) {
+                elements.loadAppEditTargetExeInput.value = message.path;
+            }
             break;
         case 'applyExternalSelection':
             applySelection(message.widgetIds || [], String(message.primaryWidgetId || ''), {
@@ -1092,6 +1342,7 @@ window.addEventListener('message', event => {
 
 restoreState();
 syncConnectionFields();
+syncLoadAppProfileSelect();
 syncAutoRefreshControls();
 syncPickControls();
 renderTree();

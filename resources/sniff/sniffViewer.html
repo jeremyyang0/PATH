@@ -99,6 +99,105 @@
             cursor: default;
         }
 
+        .profile-select {
+            min-width: 160px;
+            flex: 1 1 200px;
+        }
+
+        .modal.modal-compact {
+            grid-template-rows: auto 1fr auto;
+        }
+
+        .profile-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 12px 16px;
+        }
+
+        .profile-list-empty {
+            color: var(--muted);
+            padding: 16px 0;
+            text-align: center;
+        }
+
+        .profile-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+        }
+
+        .profile-row-meta {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .profile-row-name {
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .profile-row-detail {
+            color: var(--muted);
+            font-size: 11px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .manager-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            padding: 12px 16px 0;
+        }
+
+        .edit-form {
+            display: grid;
+            gap: 10px;
+            padding: 12px 16px;
+        }
+
+        .form-row {
+            display: grid;
+            gap: 4px;
+        }
+
+        .form-row-label {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .input-with-button {
+            display: flex;
+            gap: 6px;
+            align-items: stretch;
+        }
+
+        .input-with-button .input {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .ellipsis-button {
+            padding: 5px 12px;
+            border-radius: 7px;
+            flex: 0 0 auto;
+        }
+
+        .edit-form[hidden],
+        .modal-footer[hidden] {
+            display: none;
+        }
+
         .connection-field {
             display: none;
             align-items: center;
@@ -499,13 +598,8 @@
                     <input id="pidInput" class="input compact-number-input pid-input" type="number" min="1" placeholder="pid" />
                 </span>
                 <span id="loadappFields" class="connection-field">
-                    <input id="targetExeInput" class="input compact-input path-input" placeholder="选择 target.exe" readonly />
-                    <button id="chooseTargetExeButton" class="button secondary compact-button" type="button">选择</button>
-                    <input id="targetArgsInput" class="input compact-input args-input" placeholder="args" />
-                    <button id="newLoadAppProfileButton" class="button secondary compact-button" type="button">新建</button>
-                    <button id="loadLoadAppProfileButton" class="button secondary compact-button" type="button">加载</button>
-                    <button id="editLoadAppProfileButton" class="button secondary compact-button" type="button">编辑</button>
-                    <button id="deleteLoadAppProfileButton" class="button secondary compact-button" type="button">删除</button>
+                    <select id="loadAppProfileSelect" class="input compact-input profile-select"></select>
+                    <button id="manageLoadAppProfilesButton" class="button secondary compact-button" type="button">管理配置</button>
                 </span>
                 <button id="connectButton" class="button secondary compact-button">连接</button>
                 <label class="inline-toggle">
@@ -583,6 +677,44 @@
         <div data-action="view" class="context-item">查看属性</div>
         <div data-action="highlight" class="context-item">高亮闪烁</div>
         <div data-action="generate" class="context-item">生成 widget_def</div>
+    </div>
+
+    <div id="loadAppManagerModal" class="modal-backdrop">
+        <div class="modal modal-compact">
+            <div class="modal-title" id="loadAppManagerTitle">LoadApp 配置管理</div>
+            <div class="modal-body">
+                <div id="loadAppManagerListView">
+                    <div class="manager-toolbar">
+                        <button id="loadAppManagerNewButton" class="button" type="button">新建</button>
+                    </div>
+                    <div id="loadAppManagerProfileList" class="profile-list"></div>
+                </div>
+                <div id="loadAppManagerEditView" class="edit-form" hidden>
+                    <div class="form-row">
+                        <span class="form-row-label">配置名称</span>
+                        <input id="loadAppEditNameInput" class="input" placeholder="例如：MyApp" />
+                    </div>
+                    <div class="form-row">
+                        <span class="form-row-label">target.exe</span>
+                        <div class="input-with-button">
+                            <input id="loadAppEditTargetExeInput" class="input" placeholder="选择或输入 target.exe 路径" />
+                            <button id="loadAppEditPickExeButton" class="button secondary ellipsis-button" type="button" title="浏览">...</button>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <span class="form-row-label">启动参数</span>
+                        <input id="loadAppEditArgsInput" class="input" placeholder="可选" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" id="loadAppManagerListFooter">
+                <button id="loadAppManagerCloseButton" class="button" type="button">关闭</button>
+            </div>
+            <div class="modal-footer" id="loadAppManagerEditFooter" hidden>
+                <button id="loadAppManagerCancelEditButton" class="button secondary" type="button">取消</button>
+                <button id="loadAppManagerSaveEditButton" class="button" type="button">保存</button>
+            </div>
+        </div>
     </div>
 
     <script src="sniffViewer.js"></script>

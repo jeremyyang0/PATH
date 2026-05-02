@@ -128,7 +128,7 @@ export class NeedleRuntimeService {
         const child = spawn(targetPath, splitCommandLineArgs(targetArgs), {
             cwd: path.dirname(targetPath),
             env: this.createLoadappEnv(targetPath),
-            windowsHide: true,
+            windowsHide: false,
             detached: false
         });
 

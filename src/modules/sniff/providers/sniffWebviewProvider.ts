@@ -72,24 +72,25 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
                     this.pushTreeState();
                     this.pushAutoRefreshState();
                     this.pushPickState();
+                    this.pushLoadAppProfiles();
                     break;
                 case 'connect':
                     void this.connect(data.connection as SniffConnectionRequest | undefined);
                     break;
-                case 'chooseLoadAppTarget':
-                    void this.chooseLoadAppTarget(data.connection as SniffConnectionRequest | undefined);
+                case 'getLoadAppProfiles':
+                    this.pushLoadAppProfiles();
                     break;
-                case 'createLoadAppProfile':
-                    void this.createLoadAppProfile(data.connection as SniffConnectionRequest | undefined);
+                case 'upsertLoadAppProfile':
+                    void this.upsertLoadAppProfileFromManager(
+                        String(data.originalName || ''),
+                        this.isRecord(data.profile) ? data.profile : {}
+                    );
                     break;
-                case 'loadLoadAppProfile':
-                    void this.loadLoadAppProfile();
+                case 'removeLoadAppProfile':
+                    void this.removeLoadAppProfileFromManager(String(data.name || ''));
                     break;
-                case 'editLoadAppProfile':
-                    void this.editLoadAppProfile();
-                    break;
-                case 'deleteLoadAppProfile':
-                    void this.deleteLoadAppProfile();
+                case 'pickLoadAppExe':
+                    void this.pickLoadAppExeForManager(String(data.currentPath || ''));
                     break;
                 case 'refresh':
                     void this.refresh();
@@ -790,10 +791,87 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
             command: 'setLoadAppProfile',
             connection: {
                 mode: 'loadapp',
+                profileName: profile.name,
                 targetExe: profile.targetExe,
                 targetArgs: profile.targetArgs
             },
             force: true
+        });
+    }
+
+    // 将持久化的 LoadApp 配置推送到 Webview，供下拉框和管理弹窗统一渲染。
+    private pushLoadAppProfiles(selectedName?: string): void {
+        const profiles = this.getLoadAppProfiles();
+        this.postMessage({
+            command: 'setLoadAppProfiles',
+            profiles,
+            selectedName: selectedName || undefined
+        });
+    }
+
+    // 校验并新增或更新 LoadApp 配置，避免重名配置覆盖已有记录。
+    private async upsertLoadAppProfileFromManager(
+        originalName: string,
+        rawProfile: Record<string, unknown>
+    ): Promise<void> {
+        const name = String(rawProfile['name'] || '').trim();
+        const targetExe = String(rawProfile['targetExe'] || '').trim();
+        const targetArgs = String(rawProfile['targetArgs'] || '');
+
+        if (!name) {
+            void vscode.window.showWarningMessage('请填写 LoadApp 配置名称。');
+            return;
+        }
+        if (!targetExe) {
+            void vscode.window.showWarningMessage('请选择或填写 target.exe 路径。');
+            return;
+        }
+
+        const profiles = this.getLoadAppProfiles();
+        const trimmedOriginal = originalName.trim();
+        const conflict = profiles.find(profile => profile.name === name && profile.name !== trimmedOriginal);
+        if (conflict) {
+            void vscode.window.showWarningMessage(`LoadApp 配置 "${name}" 已存在，请换一个名称。`);
+            return;
+        }
+
+        const nextProfile: LoadAppProfile = { name, targetExe, targetArgs };
+        let nextProfiles: LoadAppProfile[];
+        if (trimmedOriginal && profiles.some(profile => profile.name === trimmedOriginal)) {
+            nextProfiles = profiles.map(profile => profile.name === trimmedOriginal ? nextProfile : profile);
+        } else {
+            nextProfiles = [...profiles, nextProfile];
+        }
+
+        await this.updateLoadAppProfiles(nextProfiles);
+        this.pushLoadAppProfiles(name);
+        this.setStatus(`已${trimmedOriginal ? '更新' : '保存'} LoadApp 配置 "${name}"`);
+    }
+
+    // 从持久化配置中删除指定 LoadApp 配置，并通知 Webview 刷新列表。
+    private async removeLoadAppProfileFromManager(name: string): Promise<void> {
+        if (!name) {
+            return;
+        }
+        const profiles = this.getLoadAppProfiles();
+        if (!profiles.some(profile => profile.name === name)) {
+            return;
+        }
+
+        await this.updateLoadAppProfiles(profiles.filter(profile => profile.name !== name));
+        this.pushLoadAppProfiles();
+        this.setStatus(`已删除 LoadApp 配置 "${name}"`);
+    }
+
+    // 复用文件选择逻辑，将选中的 target.exe 回填到管理弹窗编辑表单。
+    private async pickLoadAppExeForManager(currentPath: string): Promise<void> {
+        const picked = await this.pickLoadAppTarget(currentPath, '选择 Needle LoadApp 目标程序');
+        if (!picked) {
+            return;
+        }
+        this.postMessage({
+            command: 'setLoadAppPickedExe',
+            path: picked
         });
     }
 
