@@ -60,3 +60,43 @@ test('sync case steps use case only updates when remote steps differ', async () 
   assert.equal(updateCalls[0].steps.length, 2);
   assert.equal(notified, 1);
 });
+
+test('zentao session resolver logs in for every operation with current config', async () => {
+  const { ZentaoSessionResolver } = await import(
+    pathToFileURL(
+      path.join(process.cwd(), 'out/modules/zentao/application/use-cases/zentao-session-resolver.js')
+    ).href
+  );
+
+  let account = 'automation';
+  let loginCalls = 0;
+  const resolver = new ZentaoSessionResolver(
+    {
+      async read() {
+        return {
+          baseUrl: 'http://zentao.local',
+          account,
+          password: 'secret'
+        };
+      }
+    },
+    {
+      async login(baseUrl, account) {
+        loginCalls += 1;
+        return {
+          baseUrl,
+          account,
+          token: `${account}-token-${loginCalls}`
+        };
+      }
+    }
+  );
+
+  const firstToken = await resolver.executeWithSession(async session => session.token);
+  account = 'tester';
+  const secondToken = await resolver.executeWithSession(async session => session.token);
+
+  assert.equal(firstToken, 'automation-token-1');
+  assert.equal(secondToken, 'tester-token-2');
+  assert.equal(loginCalls, 2);
+});

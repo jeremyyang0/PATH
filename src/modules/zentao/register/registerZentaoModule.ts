@@ -34,19 +34,15 @@ async function resolveLoginPassword(configProvider: VscodeZentaoConfigProvider):
         return null;
     }
 
-    const password = config.password || await vscode.window.showInputBox({
-        prompt: '请输入禅道密码',
-        password: true,
-        ignoreFocusOut: true
-    });
-    if (!password) {
+    if (!config.password) {
+        void vscode.window.showWarningMessage('请先在 PATH 设置中配置禅道密码。');
         return null;
     }
 
     return {
         baseUrl: config.baseUrl,
         account: config.account,
-        password
+        password: config.password
     };
 }
 
@@ -54,11 +50,11 @@ export function registerZentaoModule(context: vscode.ExtensionContext): Register
     const configProvider = new VscodeZentaoConfigProvider();
     const credentialStore = new VscodeSecretCredentialStore(context.secrets);
     const gateway = new ZentaoRestGateway();
-    const loginZentao = new LoginZentao(gateway, credentialStore);
-    const getZentaoCase = new GetZentaoCase(gateway, credentialStore, configProvider);
-    const updateCaseSteps = new UpdateZentaoCaseSteps(gateway, credentialStore, configProvider);
+    const loginZentao = new LoginZentao(gateway);
+    const getZentaoCase = new GetZentaoCase(gateway, configProvider);
+    const updateCaseSteps = new UpdateZentaoCaseSteps(gateway, configProvider);
     const syncCaseSteps = new SyncCaseStepsFromDocument(getZentaoCase, updateCaseSteps);
-    const loadMyWorkItems = new LoadMyZentaoWorkItems(gateway, credentialStore, configProvider);
+    const loadMyWorkItems = new LoadMyZentaoWorkItems(gateway, configProvider);
     const treeController = new ZentaoTreeController(loadMyWorkItems);
     const treeDataProvider = new ZentaoTreeDataProvider(treeController);
     const treeView = vscode.window.createTreeView('pathZentaoTree', {
@@ -98,7 +94,7 @@ export function registerZentaoModule(context: vscode.ExtensionContext): Register
         vscode.commands.registerCommand('pathZentaoTree.logout', async () => {
             await credentialStore.clear();
             treeController.clear();
-            void vscode.window.showInformationMessage('已清除 PATH 插件保存的禅道会话。');
+            void vscode.window.showInformationMessage('已清除 PATH 插件旧版保存的禅道会话。');
         }),
         vscode.commands.registerCommand('pathZentaoTree.openItem', async (node: ZentaoNode) => {
             if (!node.item.url) {

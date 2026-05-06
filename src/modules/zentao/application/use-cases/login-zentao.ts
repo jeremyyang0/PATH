@@ -1,4 +1,3 @@
-import type { CredentialStore } from '../ports/credential-store';
 import type { ZentaoGateway } from '../ports/zentao-gateway';
 import type { ZentaoSession } from '../../domain/zentao-session';
 
@@ -10,14 +9,11 @@ export interface LoginZentaoInput {
 
 export class LoginZentao {
   constructor(
-    private readonly gateway: ZentaoGateway,
-    private readonly credentials: CredentialStore,
+    private readonly gateway: ZentaoGateway
   ) {}
 
   async execute(input: LoginZentaoInput): Promise<ZentaoSession> {
-    // 登录命令只关心“拿到 token 并持久化”，其它功能统一复用已保存会话。
-    const session = await this.gateway.login(input.baseUrl, input.account, input.password);
-    await this.credentials.write(session);
-    return session;
+    // 登录命令只校验账号密码可用，不再持久化 token，后续请求会按当前设置重新登录。
+    return this.gateway.login(input.baseUrl, input.account, input.password);
   }
 }
