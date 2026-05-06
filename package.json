@@ -2,7 +2,7 @@
   "name": "path-plugin-auto-test-homie",
   "displayName": "PATH (Plugin Auto Test Homie)",
   "description": "Python 自动化测试辅助插件，提供元素树、方法树、PATH 文件树和 AI 代码生成功能",
-  "version": "2.3.2",
+  "version": "3.0.0",
   "engines": {
     "vscode": "^1.60.0"
   },
