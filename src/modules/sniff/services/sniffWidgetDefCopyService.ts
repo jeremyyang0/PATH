@@ -28,7 +28,7 @@ export class SniffWidgetDefCopyService {
         if (hasText) {
             return [
                 '',
-                '    @property',
+                '    @ele',
                 `    def ${propertyName}(self):`,
                 '        return Ele(',
                 '            desc="",',
@@ -43,7 +43,7 @@ export class SniffWidgetDefCopyService {
 
         return [
             '',
-            '    @property',
+            '    @ele',
             `    def ${propertyName}(self):`,
             '        return Ele(',
             '            desc="",',

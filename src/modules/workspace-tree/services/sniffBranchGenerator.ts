@@ -62,7 +62,7 @@ function buildLeafInitFile(pascalName: string): string {
 
 function buildEleFile(pascalName: string): string {
     return [
-        'from dancemonkey import Ele',
+        'from dancemonkey import Ele, ele, paramele',
         '',
         '',
         `class ${pascalName}Ele:`,

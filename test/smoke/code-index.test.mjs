@@ -18,7 +18,7 @@ test('workspace code index service builds package, element and method indexes', 
   ].join('\n'), 'utf8');
   writeFileSync(path.join(methodDir, 'login_ele.py'), [
     'class LoginEle:',
-    '    @property',
+    '    @ele',
     '    def submit_btn(self):',
     '        return Ele(desc="登录按钮")',
     ''

@@ -148,7 +148,7 @@ function parseElementFile(filePath: string): ElementFileIndex[] {
                 continue;
             }
 
-            if (!line.match(/^\s+@property\s*$/)) {
+            if (!line.match(/^\s+@ele\s*$/)) {
                 continue;
             }
 

@@ -10,6 +10,7 @@ const elements = {
     propertiesContainer: document.getElementById('propertiesContainer'),
     signalsContainer: document.getElementById('signalsContainer'),
     slotsContainer: document.getElementById('slotsContainer'),
+    methodsContainer: document.getElementById('methodsContainer'),
     widgetDefContainer: document.getElementById('widgetDefContainer'),
     widgetDefMeta: document.getElementById('widgetDefMeta'),
     copyWidgetDefButton: document.getElementById('copyWidgetDefButton')
@@ -133,16 +134,17 @@ function normalizeSignalOrSlot(record) {
 }
 
 function splitOverviewState(state) {
-    // Sniff provider 把 Needle 返回的能力列表挂在 details.properties 中，这里拆成四个页签各自的数据源。
+    // Sniff provider 把 Needle 返回的能力列表挂在 details.properties 中，这里拆成各个页签的数据源。
     const properties = state.properties || {};
-    const capabilityKeys = new Set(['supportedProperties', 'supportedSignals', 'supportedSlots']);
+    const capabilityKeys = new Set(['supportedProperties', 'supportedSignals', 'supportedSlots', 'supportedMethods']);
     const widgetInfoEntries = Object.entries(properties).filter(([key]) => !capabilityKeys.has(key));
 
     return {
         widgetInfoEntries,
         supportedProperties: Array.isArray(properties.supportedProperties) ? properties.supportedProperties : [],
         supportedSignals: Array.isArray(properties.supportedSignals) ? properties.supportedSignals.map(normalizeSignalOrSlot) : [],
-        supportedSlots: Array.isArray(properties.supportedSlots) ? properties.supportedSlots.map(normalizeSignalOrSlot) : []
+        supportedSlots: Array.isArray(properties.supportedSlots) ? properties.supportedSlots.map(normalizeSignalOrSlot) : [],
+        supportedMethods: Array.isArray(properties.supportedMethods) ? properties.supportedMethods.map(normalizeSignalOrSlot) : []
     };
 }
 
@@ -190,6 +192,17 @@ function renderState(state) {
             { key: 'arguments', label: '参数' }
         ],
         '当前控件没有可展示的槽函数'
+    );
+    renderRecordsTable(
+        elements.methodsContainer,
+        overview.supportedMethods,
+        [
+            { key: 'name', label: '方法' },
+            { key: 'signature', label: '签名' },
+            { key: 'returnType', label: '返回' },
+            { key: 'arguments', label: '参数' }
+        ],
+        '当前控件没有可展示的普通方法'
     );
     renderWidgetDef((state || {}).widgetDef || {}, (state || {}).matchCount, (state || {}).occurrence);
 }

@@ -23,7 +23,7 @@ export function isEleDefinitionFile(filePath: string): boolean {
 
 /**
  * 从单个 `_ele.py` 文档中解析可生成操作的元素属性。
- * 这里直接按类、`@property`、`return Ele(...)` 的结构扫描，保证编辑器内可即时响应。
+ * 这里直接按类、`@ele`、`return Ele(...)` 的结构扫描，保证编辑器内可即时响应。
  */
 export function parseEleProperties(content: string, eleFilePath: string): ParsedEleProperty[] {
     if (!isEleDefinitionFile(eleFilePath)) {
@@ -60,7 +60,7 @@ export function parseEleProperties(content: string, eleFilePath: string): Parsed
             continue;
         }
 
-        if (!line.match(/^\s+@property\s*$/)) {
+        if (!line.match(/^\s+@ele\s*$/)) {
             continue;
         }
 

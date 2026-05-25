@@ -587,12 +587,13 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
     private async loadWidgetDetails(widgetId: string): Promise<void> {
         this.stateStore.setSelection(widgetId);
         const service = this.requireService();
-        const [widgetInfo, widgetDef, supportedProperties, supportedSignals, supportedSlots] = await Promise.all([
+        const [widgetInfo, widgetDef, supportedProperties, supportedSignals, supportedSlots, supportedMethods] = await Promise.all([
             service.getWidgetInfo(widgetId),
             service.generateWidgetDef(widgetId),
             service.getSupportedProperties(widgetId),
             service.getSupportedSignals(widgetId),
-            service.getSupportedSlots(widgetId)
+            service.getSupportedSlots(widgetId),
+            service.getSupportedMethods(widgetId)
         ]);
         this.log(
             `Widget selected. widgetId=${widgetId}, ` +
@@ -602,7 +603,8 @@ export class SniffWebviewProvider implements vscode.WebviewViewProvider, vscode.
             ...widgetInfo.properties,
             supportedProperties,
             supportedSignals,
-            supportedSlots
+            supportedSlots,
+            supportedMethods
         });
         this.stateStore.setWidgetDef(widgetId, widgetDef.widgetDef, widgetDef.matchCount, widgetDef.occurrence);
     }

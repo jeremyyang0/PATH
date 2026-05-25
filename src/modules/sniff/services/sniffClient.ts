@@ -66,6 +66,11 @@ export type SniffSupportedSlotsResponse = ErrorResponse & {
     slots?: Array<Record<string, unknown>>;
 };
 
+export type SniffSupportedMethodsResponse = ErrorResponse & {
+    widget_id?: string;
+    methods?: Array<Record<string, unknown>>;
+};
+
 function throwIfError(response: ErrorResponse): void {
     if (response.error) {
         throw new StructuredError({
@@ -200,6 +205,13 @@ export class SniffClient {
 
     public async getSupportedSlots(widgetId: string): Promise<SniffSupportedSlotsResponse> {
         return this.post<SniffSupportedSlotsResponse>('get_supported_slots', {
+            widget_id: widgetId,
+            refresh: false
+        });
+    }
+
+    public async getSupportedMethods(widgetId: string): Promise<SniffSupportedMethodsResponse> {
+        return this.post<SniffSupportedMethodsResponse>('get_supported_methods', {
             widget_id: widgetId,
             refresh: false
         });

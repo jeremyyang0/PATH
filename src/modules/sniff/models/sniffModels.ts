@@ -51,12 +51,19 @@ export interface SniffSupportedSignal {
     name?: string;
     signature?: string;
     returnType?: string;
-    arguments?: string[];
+    arguments?: string[] | string;
 }
 
 export interface SniffSupportedSlot {
     name?: string;
     signature?: string;
     returnType?: string;
-    arguments?: string[];
+    arguments?: string[] | string;
+}
+
+export interface SniffSupportedMethod {
+    name?: string;
+    signature?: string;
+    returnType?: string;
+    arguments?: string[] | string;
 }

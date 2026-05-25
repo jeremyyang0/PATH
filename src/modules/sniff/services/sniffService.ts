@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/naming-convention */
+import { StructuredError } from '../../../shared/errors/structuredError';
 import {
     SniffPickResult,
     SniffSearchResult,
+    SniffSupportedMethod,
     SniffSupportedProperty,
     SniffSupportedSignal,
     SniffSupportedSlot,
@@ -99,12 +101,87 @@ export class SniffService {
 
     public async getSupportedSignals(widgetId: string): Promise<SniffSupportedSignal[]> {
         const response = await this.client.getSupportedSignals(widgetId);
-        return Array.isArray(response.signals) ? response.signals : [];
+        return Array.isArray(response.signals)
+            ? response.signals.map(item => this.normalizeSupportedCallable(item))
+            : [];
     }
 
     public async getSupportedSlots(widgetId: string): Promise<SniffSupportedSlot[]> {
         const response = await this.client.getSupportedSlots(widgetId);
-        return Array.isArray(response.slots) ? response.slots : [];
+        return Array.isArray(response.slots)
+            ? response.slots.map(item => this.normalizeSupportedCallable(item))
+            : [];
+    }
+
+    public async getSupportedMethods(widgetId: string): Promise<SniffSupportedMethod[]> {
+        try {
+            const response = await this.client.getSupportedMethods(widgetId);
+            return Array.isArray(response.methods)
+                ? response.methods.map(item => this.normalizeSupportedCallable(item))
+                : [];
+        } catch (error) {
+            // 旧版 Needle runtime 没有 get_supported_methods route，普通方法页签降级为空列表。
+            if (error instanceof StructuredError && error.errorType === 'RouteNotFound') {
+                return [];
+            }
+            throw error;
+        }
+    }
+
+    private normalizeSupportedCallable(record: Record<string, unknown>): SniffSupportedSignal {
+        return {
+            ...record,
+            name: String(record['name'] || record['method'] || ''),
+            signature: String(record['signature'] || ''),
+            returnType: String(record['returnType'] || record['return_type'] || record['returns'] || ''),
+            // Needle 返回 parameter_types/parameter_names；这里提前拼成带类型的参数文本，避免 Webview 丢失类型。
+            arguments: this.formatCallableParameters(record)
+        };
+    }
+
+    private formatCallableParameters(record: Record<string, unknown>): string {
+        const parameterTypes = this.stringArrayFrom(record['parameter_types'] || record['parameterTypes']);
+        const parameterNames = this.stringArrayFrom(record['parameter_names'] || record['parameterNames']);
+        if (parameterTypes.length === 0 && parameterNames.length === 0) {
+            return this.formatLegacyArguments(record['arguments'] || record['args'] || record['parameters']);
+        }
+
+        const parameterCount = Math.max(parameterTypes.length, parameterNames.length);
+        const parameters: string[] = [];
+        for (let index = 0; index < parameterCount; index += 1) {
+            const parameterType = parameterTypes[index] || '';
+            const parameterName = parameterNames[index] || '';
+            const parameter = [parameterType, parameterName].filter(Boolean).join(' ');
+            if (parameter) {
+                parameters.push(parameter);
+            }
+        }
+        return parameters.join(', ');
+    }
+
+    private formatLegacyArguments(value: unknown): string {
+        if (!Array.isArray(value)) {
+            return value ? String(value) : '';
+        }
+
+        return value.map(item => {
+            if (typeof item === 'string') {
+                return item;
+            }
+            if (item && typeof item === 'object') {
+                const argument = item as Record<string, unknown>;
+                const name = String(argument['name'] || argument['arg_name'] || '');
+                const type = String(argument['type'] || argument['arg_type'] || '');
+                return [type, name].filter(Boolean).join(' ');
+            }
+            return String(item || '');
+        }).filter(Boolean).join(', ');
+    }
+
+    private stringArrayFrom(value: unknown): string[] {
+        return Array.isArray(value)
+            ? value.map(item => String(item || '')).filter(Boolean)
+            : [];
     }
 
     private extractActualTopNodes(root: SniffTreeResponse): SniffWidgetTreeNode[] {
