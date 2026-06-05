@@ -16,6 +16,7 @@ export interface StepInfo {
     kind: 'precondition' | 'step';
     desc: string;
     expect: string;
+    preconditionKind?: 'numbered' | 'plain';
     expectLine?: number;
     hasCode?: boolean;
     existingCode?: string[];

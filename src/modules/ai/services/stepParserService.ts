@@ -5,7 +5,7 @@ export function parseStepsFromFile(content: string, options: ParseStepOptions = 
     const lines = content.split('\n');
     const steps: StepInfo[] = [];
 
-    const preconditionPattern = /^\s*#\s*前置步骤\s*(\d+)?[:\s：]?\s*(.+)/;
+    const preconditionPattern = /^\s*#\s*前置(步骤|条件)\s*(\d+)?[:\s：]?\s*(.+)/;
     const stepPattern = /^\s*#\s*步骤\s*(\d+)?[:\s：]?\s*(.+)/;
     const expectPattern = /^\s*#\s*预期\s*(\d+)?[:\s：]?\s*(.+)/;
 
@@ -19,10 +19,12 @@ export function parseStepsFromFile(content: string, options: ParseStepOptions = 
             if (currentStep) {
                 steps.push(currentStep);
             }
+            const preconditionKind = preconditionMatch[1] === '步骤' ? 'numbered' : 'plain';
             currentStep = {
                 line: index,
                 kind: 'precondition',
-                desc: preconditionMatch[2]?.trim() || '',
+                preconditionKind,
+                desc: preconditionMatch[3]?.trim() || '',
                 expect: ''
             };
             continue;

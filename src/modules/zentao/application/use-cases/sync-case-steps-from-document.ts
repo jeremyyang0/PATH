@@ -1,10 +1,15 @@
 import { GetZentaoCase } from './get-zentao-case';
 import { UpdateZentaoCaseSteps } from './update-zentao-case-steps';
-import { ZentaoCaseStep } from '../../domain/zentao-case';
+import { ZentaoCaseStep, ZentaoCaseUpdate } from '../../domain/zentao-case';
 
 export interface DocumentStep {
     readonly desc: string;
     readonly expect: string;
+}
+
+export interface DocumentCase {
+    readonly precondition: string;
+    readonly steps: readonly DocumentStep[];
 }
 
 export interface SyncCaseStepsApproval {
@@ -15,10 +20,26 @@ export interface SyncCaseStepsApproval {
 export type SyncCaseStepsResult =
     | { status: 'no-local-steps' | 'no-changes' }
     | { status: 'skipped' }
-    | { status: 'synced'; steps: readonly ZentaoCaseStep[] };
+    | { status: 'synced'; update: ZentaoCaseUpdate };
 
 function stripIndex(text: string): string {
     return text.replace(/^\d+[:：\s]*/, '').trim();
+}
+
+function normalizeMultilineText(text: string): string {
+    return text
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .join('\n');
+}
+
+function normalizePreconditionForCompare(text: string): string {
+    return normalizeMultilineText(text)
+        .split('\n')
+        .map(line => line.replace(/^(\d+)\s*[.、:：]\s*/, '$1. '))
+        .join('\n');
 }
 
 function hasStepChanges(localSteps: readonly DocumentStep[], remoteSteps: readonly ZentaoCaseStep[]): boolean {
@@ -41,6 +62,11 @@ function hasStepChanges(localSteps: readonly DocumentStep[], remoteSteps: readon
     return false;
 }
 
+function hasCaseChanges(localCase: DocumentCase, remotePrecondition: string, remoteSteps: readonly ZentaoCaseStep[]): boolean {
+    return normalizePreconditionForCompare(localCase.precondition) !== normalizePreconditionForCompare(remotePrecondition)
+        || hasStepChanges(localCase.steps, remoteSteps);
+}
+
 export class SyncCaseStepsFromDocument {
     public constructor(
         private readonly getCase: GetZentaoCase,
@@ -48,19 +74,19 @@ export class SyncCaseStepsFromDocument {
     ) {}
 
     /**
-     * 保存测试文件时只在本地步骤和禅道远端确实有差异时才触发确认与回写。
+     * 保存测试文件时同时比较前置条件和步骤，只有本地内容与禅道远端确实有差异才触发确认与回写。
      */
     public async execute(
         caseId: string,
-        localSteps: readonly DocumentStep[],
+        localCase: DocumentCase,
         approval: SyncCaseStepsApproval
     ): Promise<SyncCaseStepsResult> {
-        if (localSteps.length === 0) {
+        if (localCase.steps.length === 0 && normalizeMultilineText(localCase.precondition).length === 0) {
             return { status: 'no-local-steps' };
         }
 
         const remoteCase = await this.getCase.execute(caseId);
-        if (!hasStepChanges(localSteps, remoteCase.steps)) {
+        if (!hasCaseChanges(localCase, remoteCase.precondition, remoteCase.steps)) {
             return { status: 'no-changes' };
         }
 
@@ -69,12 +95,15 @@ export class SyncCaseStepsFromDocument {
             return { status: 'skipped' };
         }
 
-        const steps = localSteps.map(step => ({
-            desc: step.desc,
-            expect: step.expect
-        }));
-        await this.updateCaseSteps.execute(caseId, steps);
+        const update = {
+            precondition: localCase.precondition,
+            steps: localCase.steps.map(step => ({
+                desc: step.desc,
+                expect: step.expect
+            }))
+        };
+        await this.updateCaseSteps.execute(caseId, update);
         await approval.notifySynced(caseId);
-        return { status: 'synced', steps };
+        return { status: 'synced', update };
     }
 }

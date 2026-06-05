@@ -3,6 +3,11 @@ export interface ZentaoCaseStep {
     readonly expect: string;
 }
 
+export interface ZentaoCaseUpdate {
+    readonly precondition: string;
+    readonly steps: readonly ZentaoCaseStep[];
+}
+
 export interface ZentaoCase {
     readonly id: string;
     readonly title: string;

@@ -1,4 +1,4 @@
-import { ZentaoCaseStep } from '../../domain/zentao-case';
+import { ZentaoCaseUpdate } from '../../domain/zentao-case';
 import { ZentaoConfigProvider } from '../ports/zentao-config-provider';
 import { ZentaoGateway } from '../ports/zentao-gateway';
 import { ZentaoSessionResolver } from './zentao-session-resolver';
@@ -13,7 +13,7 @@ export class UpdateZentaoCaseSteps {
         this.sessionResolver = new ZentaoSessionResolver(configProvider, gateway);
     }
 
-    public async execute(caseId: string, steps: readonly ZentaoCaseStep[]): Promise<void> {
-        await this.sessionResolver.executeWithSession(session => this.gateway.updateCaseSteps(session, caseId, steps));
+    public async execute(caseId: string, update: ZentaoCaseUpdate): Promise<void> {
+        await this.sessionResolver.executeWithSession(session => this.gateway.updateCaseSteps(session, caseId, update));
     }
 }

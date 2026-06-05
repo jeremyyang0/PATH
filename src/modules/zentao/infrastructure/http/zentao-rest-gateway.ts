@@ -1,5 +1,5 @@
 import type { ZentaoGateway } from '../../application/ports/zentao-gateway';
-import type { ZentaoCase, ZentaoCaseStep } from '../../domain/zentao-case';
+import type { ZentaoCase, ZentaoCaseStep, ZentaoCaseUpdate } from '../../domain/zentao-case';
 import type { ZentaoSession } from '../../domain/zentao-session';
 import type { ZentaoWorkItem } from '../../domain/zentao-work-item';
 import * as http from 'http';
@@ -225,13 +225,15 @@ export class ZentaoRestGateway implements ZentaoGateway {
     };
   }
 
-  async updateCaseSteps(session: ZentaoSession, caseId: string, steps: readonly ZentaoCaseStep[]): Promise<void> {
+  async updateCaseSteps(session: ZentaoSession, caseId: string, update: ZentaoCaseUpdate): Promise<void> {
     const result = await sendJsonRequest<JsonRecord>(
       `${normalizeApiBase(session.baseUrl)}/testcases/${caseId}`,
       'PUT',
       { [HEADER_TOKEN]: session.token },
       {
-        steps: steps.map(step => ({
+        // 反向同步前置条件时保留用户输入的比较符号，不做 HTML 实体转义。
+        precondition: update.precondition,
+        steps: update.steps.map(step => ({
           desc: step.desc,
           expect: step.expect
         }))

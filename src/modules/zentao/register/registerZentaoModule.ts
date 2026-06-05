@@ -23,6 +23,30 @@ function extractZentaoId(text: string): string | null {
     return match?.[1] || null;
 }
 
+function parseLocalCaseForZentaoSync(text: string): {
+    precondition: string;
+    steps: Array<{ desc: string; expect: string }>;
+} {
+    const parsedSteps = parseStepsFromFile(text, { includePreconditions: true });
+    const preconditions = parsedSteps.filter(step => step.kind === 'precondition');
+    const steps = parsedSteps
+        .filter(step => step.kind === 'step')
+        .map(step => ({
+            desc: step.desc,
+            expect: step.expect
+        }));
+
+    // 前置步骤来自禅道编号行，反向同步时恢复为编号文本；前置条件注释保持原文。
+    const precondition = preconditions
+        .map((step, index) => step.preconditionKind === 'numbered' ? `${index + 1}. ${step.desc}` : step.desc)
+        .join('\n');
+
+    return {
+        precondition,
+        steps
+    };
+}
+
 async function resolveLoginPassword(configProvider: VscodeZentaoConfigProvider): Promise<{
     baseUrl: string;
     account: string;
@@ -141,12 +165,12 @@ export function registerZentaoModule(context: vscode.ExtensionContext): Register
                 return;
             }
 
-            const localSteps = parseStepsFromFile(document.getText(), { includePreconditions: false });
+            const localCase = parseLocalCaseForZentaoSync(document.getText());
             try {
-                await syncCaseSteps.execute(caseId, localSteps, {
+                await syncCaseSteps.execute(caseId, localCase, {
                     approve: async currentCaseId => {
                         const selection = await vscode.window.showInformationMessage(
-                            `检测到该文件的步骤/预期结果与禅道(ID: ${currentCaseId})不一致，是否同步更新到禅道？`,
+                            `检测到该文件的前置条件或步骤/预期结果与禅道(ID: ${currentCaseId})不一致，是否同步更新到禅道？`,
                             '是',
                             '否'
                         );
