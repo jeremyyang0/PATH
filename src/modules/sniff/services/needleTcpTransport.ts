@@ -15,7 +15,8 @@ function normalizeRoute(route: string): string {
 }
 
 function encodeRequest(route: string, payload?: Record<string, unknown>): string {
-    return `POST ${normalizeRoute(route)}\n${JSON.stringify(payload || {})}`;
+    const body = JSON.stringify(payload || {});
+    return `POST ${normalizeRoute(route)} ${Buffer.byteLength(body, 'utf8')}\n${body}`;
 }
 
 function parseResponse<TResponse>(route: string, response: string): TResponse {
@@ -38,7 +39,7 @@ function parseResponse<TResponse>(route: string, response: string): TResponse {
 
 export class NeedleTcpTransport {
     /**
-     * Needle agent 使用简单的 `POST /route + JSON body` TCP 协议；这里集中处理 UTF-8 编解码和超时。
+     * Needle agent 使用带 UTF-8 body 字节长度的请求帧；这里集中处理编解码和超时。
      */
     public async post<TResponse>(
         endpoint: NeedleEndpoint,

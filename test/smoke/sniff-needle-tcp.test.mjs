@@ -12,10 +12,17 @@ const { NeedleTcpTransport, needleTcpTransportTestOnly } = require(
 function startOneShotServer(handler) {
   const server = net.createServer((socket) => {
     let request = '';
+    let handled = false;
     socket.setEncoding('utf8');
     socket.on('data', (chunk) => {
       request += chunk;
-      if (!request.includes('\n')) return;
+      const headerEnd = request.indexOf('\n');
+      if (handled || headerEnd < 0) return;
+      const headerParts = request.substring(0, headerEnd).trim().split(/\s+/);
+      const bodyLength = Number(headerParts[2]);
+      if (!Number.isSafeInteger(bodyLength)) return;
+      if (Buffer.byteLength(request.substring(headerEnd + 1), 'utf8') < bodyLength) return;
+      handled = true;
       handler(request, socket);
     });
   });
@@ -45,7 +52,8 @@ test('Needle TCP transport sends UTF-8 POST route and JSON body', async () => {
     );
 
     assert.deepEqual(response, { ok: true, text: '中文' });
-    assert.equal(captured, 'POST /search_widgets\n{"widget_def":{"text":"中文"}}');
+    const body = '{"widget_def":{"text":"中文"}}';
+    assert.equal(captured, `POST /search_widgets ${Buffer.byteLength(body, 'utf8')}\n${body}`);
   } finally {
     await server.close();
   }
@@ -88,5 +96,5 @@ test('Needle TCP transport supports long pick timeouts', async () => {
 
 test('Needle TCP request formatter keeps route semantics stable', () => {
   assert.equal(needleTcpTransportTestOnly.normalizeRoute('///hello'), '/hello');
-  assert.equal(needleTcpTransportTestOnly.encodeRequest('hello', { pid: 7 }), 'POST /hello\n{"pid":7}');
+  assert.equal(needleTcpTransportTestOnly.encodeRequest('hello', { pid: 7 }), 'POST /hello 9\n{"pid":7}');
 });
